@@ -12,5 +12,7 @@ import java.util.List;
 public class LoginResponse {
     private Long id;
     private String username;
+    private String firstName;
+    private String lastName;
     private List<String> roles;
 }

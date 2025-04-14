@@ -12,6 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import pl.edu.agh.student_registration_system.exceptions.AuthenticationFailedException;
+import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
+import pl.edu.agh.student_registration_system.model.User;
 import pl.edu.agh.student_registration_system.payload.dto.LoginDTO;
 import pl.edu.agh.student_registration_system.payload.response.LoginResponse;
 import pl.edu.agh.student_registration_system.repository.RoleRepository;
@@ -50,13 +52,15 @@ public class AuthServiceImpl implements AuthService {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            User user = userRepository.findByEmail(userDetails.getEmail()).orElseThrow(
+                    () -> new ResourceNotFoundException("User", "email", userDetails.getEmail()));
 
             List<String> roles = userDetails.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toList());
 
             log.info("User with email '{}' logged in successfully with role: {}", loginDTO.getEmail(), roles.get(0));
-            return new LoginResponse(userDetails.getId(), userDetails.getUsername(), roles);
+            return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), roles);
 
         } catch (AuthenticationException e) {
             log.warn("Authentication failed for email: {} - Reason: {}", loginDTO.getEmail(), e.getMessage());
@@ -72,11 +76,13 @@ public class AuthServiceImpl implements AuthService {
         }
         log.debug("Fetching user details for authenticated user");
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        User user = userRepository.findByEmail(userDetails.getEmail()).orElseThrow(
+                () -> new ResourceNotFoundException("User", "email", userDetails.getEmail()));
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
         log.debug("User details fetched successfully for user email: {}", userDetails.getUsername());
-        return new LoginResponse(userDetails.getId(), userDetails.getUsername(), roles);
+        return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), roles);
     }
 
     @Override
