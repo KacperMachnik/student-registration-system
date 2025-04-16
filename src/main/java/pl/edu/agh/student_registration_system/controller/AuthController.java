@@ -16,6 +16,7 @@ import pl.edu.agh.student_registration_system.payload.response.MessageResponse;
 import pl.edu.agh.student_registration_system.security.service.UserDetailsImpl;
 import pl.edu.agh.student_registration_system.service.AuthService;
 
+
 @RestController
 @RequestMapping("/api/auth")
 @Slf4j

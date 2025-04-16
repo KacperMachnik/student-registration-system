@@ -28,9 +28,6 @@ public class RegisterDTO {
 
     private RoleType roleType; // STUDENT lub TEACHER lub DEANERY_STAFF
 
-    @Size(min = 6, max = 6)
-    private String indexNumber; //STUDENT only
-
     @Size(max = 100)
     private String title; // TEACHER only
 }

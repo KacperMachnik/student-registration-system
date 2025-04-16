@@ -1,7 +1,7 @@
 package pl.edu.agh.student_registration_system.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     private final AuthenticationManager authenticationManager;
@@ -34,14 +35,6 @@ public class AuthServiceImpl implements AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder encoder;
 
-    @Autowired
-    public AuthServiceImpl(AuthenticationManager authenticationManager, JwtUtils jwtUtils, UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder encoder) {
-        this.authenticationManager = authenticationManager;
-        this.jwtUtils = jwtUtils;
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.encoder = encoder;
-    }
 
     @Override
     public LoginResponse login(LoginDTO loginDTO) {
@@ -60,7 +53,7 @@ public class AuthServiceImpl implements AuthService {
                     .collect(Collectors.toList());
 
             log.info("User with email '{}' logged in successfully with role: {}", loginDTO.getEmail(), roles.get(0));
-            return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), roles);
+            return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), user.getIsActive(), roles);
 
         } catch (AuthenticationException e) {
             log.warn("Authentication failed for email: {} - Reason: {}", loginDTO.getEmail(), e.getMessage());
@@ -82,7 +75,7 @@ public class AuthServiceImpl implements AuthService {
                 .map(GrantedAuthority::getAuthority)
                 .toList();
         log.debug("User details fetched successfully for user email: {}", userDetails.getUsername());
-        return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), roles);
+        return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), user.getIsActive(), roles);
     }
 
     @Override

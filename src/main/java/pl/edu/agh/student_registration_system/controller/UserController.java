@@ -28,7 +28,7 @@ public class UserController {
 
     @PostMapping("/register")
     @PreAuthorize("hasAuthority('DEANERY_STAFF')")
-    public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterDTO registerRequest) { // Używa email
+    public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterDTO registerRequest) {
         log.info("Deanery staff attempting to register user with email: {}", registerRequest.getEmail());
         userService.registerNewUser(registerRequest);
         log.info("User with email {} registered successfully by Deanery staff.", registerRequest.getEmail());

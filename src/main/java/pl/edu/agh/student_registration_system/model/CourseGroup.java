@@ -20,7 +20,7 @@ public class CourseGroup {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long courseGroupId;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private Integer groupNumber;
 
     @Column(nullable = false)

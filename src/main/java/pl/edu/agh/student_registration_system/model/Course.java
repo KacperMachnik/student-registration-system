@@ -19,13 +19,15 @@ public class Course {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long courseId;
 
+    @Column(nullable = false)
+    private String courseName;
+
     @Column(unique = true, nullable = false)
     private String courseCode;
 
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "credits")
     private Integer credits;
 
     @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
