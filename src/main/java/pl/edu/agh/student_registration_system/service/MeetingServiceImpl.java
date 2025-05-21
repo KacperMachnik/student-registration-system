@@ -33,7 +33,7 @@ public class MeetingServiceImpl implements MeetingService {
         CourseGroup group = courseGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseGroup", "id", groupId));
 
-        Integer lastMeetingNumber = meetingRepository.findTopByGroupOrderByMeetingNumberDesc(group)
+        int lastMeetingNumber = meetingRepository.findTopByGroupOrderByMeetingNumberDesc(group)
                 .map(Meeting::getMeetingNumber)
                 .orElse(0);
 
@@ -47,7 +47,7 @@ public class MeetingServiceImpl implements MeetingService {
             meeting.setMeetingDate(currentDateTime);
             meeting.setTopic(defineMeetingDto.getTopic());
             meetingsToCreate.add(meeting);
-            currentDateTime = currentDateTime.plus(1, ChronoUnit.WEEKS);
+            currentDateTime = currentDateTime.plusWeeks(1);
         }
 
         List<Meeting> savedMeetings = meetingRepository.saveAll(meetingsToCreate);

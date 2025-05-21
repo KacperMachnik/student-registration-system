@@ -7,9 +7,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class EnrollmentResponse { // Odpowiedź dla zapisu
+public class EnrollmentResponse {
     private Long enrollmentId;
     private Long studentId;
     private Long groupId;
-    private String enrollmentDate; // Jako String ISO
+    private String enrollmentDate;
 }

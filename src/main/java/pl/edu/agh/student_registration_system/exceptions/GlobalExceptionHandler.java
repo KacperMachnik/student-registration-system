@@ -31,7 +31,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<MessageResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
         MessageResponse response = new MessageResponse(ex.getMessage());
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -48,7 +47,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<MessageResponse> handleDataIntegrityViolationException(DataIntegrityViolationException ex) {
-        MessageResponse response = new MessageResponse(ex.getMessage());
+        String message = "Data integrity violation. This could be due to a duplicate entry or a violation of a database constraint.";
+        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
+            if (ex.getMostSpecificCause().getMessage().toLowerCase().contains("unique constraint") ||
+                    ex.getMostSpecificCause().getMessage().toLowerCase().contains("duplicate key")) {
+                message = "An entry with this information already exists. Please check for duplicates.";
+            }
+        } else if (ex.getMessage() != null) {
+            if (ex.getMessage().toLowerCase().contains("unique constraint") ||
+                    ex.getMessage().toLowerCase().contains("duplicate key")) {
+                message = "An entry with this information already exists. Please check for duplicates.";
+            }
+        }
+        MessageResponse response = new MessageResponse(message);
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
@@ -71,8 +82,32 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<MessageResponse> handleDeletionBlockedException(IllegalStateException ex) {
+    public ResponseEntity<MessageResponse> handleIllegalStateException(IllegalStateException ex) {
+        MessageResponse response = new MessageResponse("An internal error occurred: " + ex.getMessage());
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(IndexNumberGenerationException.class)
+    public ResponseEntity<MessageResponse> handleIndexNumberGenerationException(IndexNumberGenerationException ex) {
         MessageResponse response = new MessageResponse(ex.getMessage());
-        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(InvalidOperationException.class)
+    public ResponseEntity<MessageResponse> handleInvalidOperationException(InvalidOperationException ex) {
+        MessageResponse response = new MessageResponse(ex.getMessage());
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<MessageResponse> handleGenericRuntimeException(RuntimeException ex) {
+        MessageResponse response = new MessageResponse("An unexpected error occurred. Please try again later.");
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<MessageResponse> handleGenericException(Exception ex) {
+        MessageResponse response = new MessageResponse("An unexpected server error occurred.");
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

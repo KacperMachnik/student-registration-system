@@ -22,6 +22,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import pl.edu.agh.student_registration_system.model.*;
 import pl.edu.agh.student_registration_system.repository.RoleRepository;
+import pl.edu.agh.student_registration_system.repository.StudentRepository;
 import pl.edu.agh.student_registration_system.repository.UserRepository;
 import pl.edu.agh.student_registration_system.security.jwt.AuthEntryPointJwt;
 import pl.edu.agh.student_registration_system.security.jwt.AuthTokenFilter;
@@ -37,12 +38,18 @@ public class WebSecurityConfig {
     private final UserDetailsServiceImpl userDetailsService;
     private final AuthEntryPointJwt unauthorizedHandler;
     private final JwtUtils jwtUtils;
+    private final StudentRepository studentRepository;
+
 
     @Autowired
-    public WebSecurityConfig(UserDetailsServiceImpl userDetailsService, AuthEntryPointJwt unauthorizedHandler, JwtUtils jwtUtils) {
+    public WebSecurityConfig(UserDetailsServiceImpl userDetailsService,
+                             AuthEntryPointJwt unauthorizedHandler,
+                             JwtUtils jwtUtils,
+                             StudentRepository studentRepository) {
         this.userDetailsService = userDetailsService;
         this.unauthorizedHandler = unauthorizedHandler;
         this.jwtUtils = jwtUtils;
+        this.studentRepository = studentRepository;
     }
 
     @Bean
@@ -77,36 +84,45 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .requestMatchers("/h2-console/**").permitAll() // .
+                        .requestMatchers("/h2-console/**").permitAll()
 
                         .requestMatchers("/api/users/register/**").hasAuthority(RoleType.DEANERY_STAFF.name())
 
                         .requestMatchers("/api/students/me/**").hasAuthority(RoleType.STUDENT.name())
-                        .requestMatchers(HttpMethod.POST, "/api/enrollments").hasAuthority(RoleType.STUDENT.name())
+                        .requestMatchers(HttpMethod.POST, "/api/enrollments/my/**").hasAuthority(RoleType.STUDENT.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/enrollments/my/**").hasAuthority(RoleType.STUDENT.name())
                         .requestMatchers(HttpMethod.GET, "/api/groups/available").hasAuthority(RoleType.STUDENT.name())
+                        .requestMatchers(HttpMethod.GET, "/api/students/me/groups").hasAuthority(RoleType.STUDENT.name())
+                        .requestMatchers(HttpMethod.GET, "/api/students/me/grades").hasAuthority(RoleType.STUDENT.name())
+                        .requestMatchers(HttpMethod.GET, "/api/students/me/attendance").hasAuthority(RoleType.STUDENT.name())
+
 
                         .requestMatchers("/api/teachers/me/**").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.POST, "/api/grades").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.PUT, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.PATCH, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.POST, "/api/meetings/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.PUT, "/api/attendance/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.PATCH, "/api/attendance/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.GET, "/api/meetings/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/students").hasAnyAuthority(RoleType.TEACHER.name(), RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.POST, "/api/groups/{groupId}/meetings").hasAuthority(RoleType.TEACHER.name())
+                        .requestMatchers(HttpMethod.POST, "/api/meetings/{meetingId}/attendance").hasAuthority(RoleType.TEACHER.name())
+                        .requestMatchers(HttpMethod.PUT, "/api/attendance/{attendanceId}").hasAuthority(RoleType.TEACHER.name())
+                        .requestMatchers(HttpMethod.GET, "/api/teachers/me/courses").hasAuthority(RoleType.TEACHER.name())
+                        .requestMatchers(HttpMethod.GET, "/api/teachers/me/groups").hasAuthority(RoleType.TEACHER.name())
 
-                        .requestMatchers("/api/students/**").authenticated()
-                        .requestMatchers("/api/teachers/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/courses/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/groups/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/users/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/meetings/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/attendance/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/enrollments/**").hasAuthority(RoleType.DEANERY_STAFF.name())
 
-                        .requestMatchers(HttpMethod.GET, "/api/courses", "/api/courses/**", "/api/groups/**").authenticated()
+                        .requestMatchers("/api/students", "/api/students/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers("/api/teachers", "/api/teachers/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers("/api/courses", "/api/courses/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers("/api/groups", "/api/groups/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.POST, "/api/enrollments/admin/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/enrollments/admin/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/meetings").hasAnyAuthority(RoleType.DEANERY_STAFF.name(), RoleType.TEACHER.name(), RoleType.STUDENT.name())
+                        .requestMatchers(HttpMethod.GET, "/api/meetings/{meetingId}/attendance").hasAnyAuthority(RoleType.DEANERY_STAFF.name(), RoleType.TEACHER.name())
+
+
+                        .requestMatchers(HttpMethod.GET, "/api/courses/{courseId}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/courses/{courseId}/groups").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/students").authenticated()
+
 
                         .requestMatchers("/api/auth/logout").authenticated()
                         .requestMatchers("/api/auth/me").authenticated()
@@ -192,14 +208,18 @@ public class WebSecurityConfig {
                 studentUser.setLastName("Nowak");
                 studentUser.setRole(studentRole);
                 studentUser.setIsActive(true);
-                String uniqueIndexNumber = "000000";
+
                 Student studentProfile = new Student();
-                studentProfile.setIndexNumber(uniqueIndexNumber);
+                String defaultIndex = "123456";
+                if (this.studentRepository.existsByIndexNumber(defaultIndex)) {
+                    log.warn("Default student index {} already exists! The default student might not be created correctly if index must be unique.", defaultIndex);
+                }
+                studentProfile.setIndexNumber(defaultIndex);
                 studentProfile.setUser(studentUser);
                 studentUser.setStudentProfile(studentProfile);
 
                 userRepository.save(studentUser);
-                log.info("Default STUDENT user created: {} with index {}", studentEmail, uniqueIndexNumber);
+                log.info("Default STUDENT user created: {} with index {}", studentEmail, studentProfile.getIndexNumber());
             } else {
                 log.info("Default STUDENT user with email '{}' already exists.", studentEmail);
             }

@@ -9,14 +9,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import pl.edu.agh.student_registration_system.exceptions.AuthenticationFailedException;
 import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
 import pl.edu.agh.student_registration_system.model.User;
 import pl.edu.agh.student_registration_system.payload.dto.LoginDTO;
 import pl.edu.agh.student_registration_system.payload.response.LoginResponse;
-import pl.edu.agh.student_registration_system.repository.RoleRepository;
 import pl.edu.agh.student_registration_system.repository.UserRepository;
 import pl.edu.agh.student_registration_system.security.jwt.JwtUtils;
 import pl.edu.agh.student_registration_system.security.service.UserDetailsImpl;
@@ -32,8 +30,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
-    private final PasswordEncoder encoder;
+
 
 
     @Override
@@ -52,7 +49,7 @@ public class AuthServiceImpl implements AuthService {
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toList());
 
-            log.info("User with email '{}' logged in successfully with role: {}", loginDTO.getEmail(), roles.get(0));
+            log.info("User with email '{}' logged in successfully with role: {}", loginDTO.getEmail(), roles.getFirst());
             return new LoginResponse(userDetails.getId(), userDetails.getUsername(), user.getFirstName(), user.getLastName(), user.getIsActive(), roles);
 
         } catch (AuthenticationException e) {

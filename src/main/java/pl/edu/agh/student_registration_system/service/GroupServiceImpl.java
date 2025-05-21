@@ -97,7 +97,12 @@ public class GroupServiceImpl implements GroupService {
                 changed = true;
                 log.debug("Updated teacher for group {}", groupId);
             }
+        } else if (group.getTeacher() != null) {
+            group.setTeacher(null);
+            changed = true;
+            log.debug("Removed teacher from group {}", groupId);
         }
+
 
         if (updateGroupDto.getGroupNumber() != null && !updateGroupDto.getGroupNumber().equals(group.getGroupNumber())) {
             if (courseGroupRepository.existsByCourseAndGroupNumberAndCourseGroupIdNot(
@@ -135,15 +140,15 @@ public class GroupServiceImpl implements GroupService {
     @Transactional
     public void deleteGroup(Long groupId) {
         log.info("Attempting to delete group with ID: {}", groupId);
-        if (!courseGroupRepository.existsById(groupId)) {
-            throw new ResourceNotFoundException("CourseGroup", "id", groupId);
-        }
+        CourseGroup groupToDelete = courseGroupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseGroup", "id", groupId));
+
         log.warn("Deleting group {}. This will trigger cascading deletes for Enrollments, Meetings, and Attendance based on entity mappings.", groupId);
         try {
-            courseGroupRepository.deleteById(groupId);
+            courseGroupRepository.delete(groupToDelete);
             log.info("Group {} and potentially related entities deleted successfully via cascade.", groupId);
         } catch (DataIntegrityViolationException e) {
-            log.error("Failed to delete group {} due to data integrity constraints. Check deeper relations or DB constraints. Original exception: {}", groupId, e.getMessage());
+            log.error("Failed to delete group {} due to data integrity constraints. Check deeper relations or DB constraints. Original exception: {}", groupId, e.getMessage(), e);
             throw new DeletionBlockedException("Cannot delete group: Deleting related data (enrollments, meetings, attendance) failed. " + e.getMessage());
         }
     }
@@ -170,11 +175,10 @@ public class GroupServiceImpl implements GroupService {
         if (!groupsToDelete.isEmpty()) {
             log.warn("Deleting {} groups for course {}. This will trigger cascading deletes for Enrollments, Meetings, etc. for each group.", groupsToDelete.size(), courseId);
             try {
-
-                courseGroupRepository.deleteAll(groupsToDelete);
+                courseGroupRepository.deleteAllInBatch(groupsToDelete);
                 log.info("Successfully deleted {} groups for course {}.", groupsToDelete.size(), courseId);
             } catch (DataIntegrityViolationException e) {
-                log.error("Failed to delete groups for course {} due to data integrity constraints during cascade. Original exception: {}", courseId, e.getMessage());
+                log.error("Failed to delete groups for course {} due to data integrity constraints during cascade. Original exception: {}", courseId, e.getMessage(), e);
                 throw new DeletionBlockedException("Cannot delete all groups for course: Deleting related data failed for at least one group. " + e.getMessage());
             }
         } else {
@@ -209,6 +213,7 @@ public class GroupServiceImpl implements GroupService {
                 String pattern = "%" + search.toLowerCase() + "%";
                 Predicate courseCodeMatch = cb.like(cb.lower(root.get("course").get("courseCode")), pattern);
                 Predicate courseNameMatch = cb.like(cb.lower(root.get("course").get("courseName")), pattern);
+
                 Join<CourseGroup, Teacher> teacherJoin = root.join("teacher", JoinType.LEFT);
                 Join<Teacher, User> userJoin = teacherJoin.join("user", JoinType.LEFT);
                 Predicate teacherFirstNameMatch = cb.like(cb.lower(userJoin.get("firstName")), pattern);
@@ -233,7 +238,7 @@ public class GroupServiceImpl implements GroupService {
                 .filter(g -> g.getAvailableSlots() > 0)
                 .collect(Collectors.toList());
 
-        log.info("Found {} available groups for student {}", availabilityResponses.size(), currentStudent.getStudentId());
+        log.info("Found {} available groups (after filtering for slots) for student {}", availabilityResponses.size(), currentStudent.getStudentId());
 
         return new PageImpl<>(availabilityResponses, pageable, groupPage.getTotalElements());
     }
@@ -271,6 +276,7 @@ public class GroupServiceImpl implements GroupService {
         if (group == null) return null;
 
         int enrolledCount = enrollmentRepository.countByGroup(group);
+
         int availableSlots = Math.max(0, group.getMaxCapacity() - enrolledCount);
 
         return new GroupAvailabilityResponse(
@@ -285,7 +291,16 @@ public class GroupServiceImpl implements GroupService {
     }
 
     private CourseResponse mapToCourseResponse(Course course) {
-        return null;
+        if (course == null) {
+            return null;
+        }
+        return new CourseResponse(
+                course.getCourseId(),
+                course.getCourseCode(),
+                course.getCourseName(),
+                course.getDescription(),
+                course.getCredits()
+        );
     }
 
 
@@ -308,10 +323,4 @@ public class GroupServiceImpl implements GroupService {
                 teacher.getTitle()
         );
     }
-
-    private CourseGroup findGroupByIdWithDetails(Long groupId) {
-        return courseGroupRepository.findByIdWithDetails(groupId)
-                .orElseThrow(() -> new ResourceNotFoundException("CourseGroup", "id", groupId));
-    }
-
 }

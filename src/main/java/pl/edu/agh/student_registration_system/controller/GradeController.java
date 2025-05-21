@@ -18,8 +18,6 @@ public class GradeController {
 
     private final GradeService gradeService;
 
-
-    //todo
     @PostMapping
     @PreAuthorize("hasAuthority('TEACHER')")
     public ResponseEntity<GradeResponse> addGrade(@Valid @RequestBody CreateGradeDTO createGradeDto) {
@@ -27,17 +25,15 @@ public class GradeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(newGrade);
     }
 
-    //todo
     @PutMapping("/{gradeId}")
-    @PreAuthorize("hasAuthority('TEACHER')")
+    @PreAuthorize("hasAuthority('DEANERY_STAFF') or (hasAuthority('TEACHER') and @gradeSecurityService.isTeacherIssuerOfGrade(#gradeId))")
     public ResponseEntity<GradeResponse> updateGrade(@PathVariable Long gradeId, @Valid @RequestBody UpdateGradeDTO updateGradeDto) {
         GradeResponse updatedGrade = gradeService.updateGrade(gradeId, updateGradeDto);
         return ResponseEntity.ok(updatedGrade);
     }
 
-    //todo
     @DeleteMapping("/{gradeId}")
-    @PreAuthorize("hasAuthority('TEACHER')")
+    @PreAuthorize("hasAuthority('DEANERY_STAFF') or (hasAuthority('TEACHER') and @gradeSecurityService.isTeacherIssuerOfGrade(#gradeId))")
     public ResponseEntity<Void> deleteGrade(@PathVariable Long gradeId) {
         gradeService.deleteGrade(gradeId);
         return ResponseEntity.noContent().build();

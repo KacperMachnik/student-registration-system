@@ -8,7 +8,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Entity(name = "meetings")
-@Table(uniqueConstraints = {
+@Table(name = "meetings", uniqueConstraints = { // <<< ADDED EXPLICIT TABLE NAME
         @UniqueConstraint(columnNames = {"group_id", "meeting_number"}, name = "uk_group_meeting_number")
 })
 @Data
@@ -24,7 +24,7 @@ public class Meeting {
     @Column(nullable = false)
     private Integer meetingNumber;
 
-    @Column(name = "meeting_date", nullable = false, columnDefinition = "DATE")
+    @Column(name = "meeting_date", nullable = false)
     private LocalDateTime meetingDate;
 
     private String topic;

@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.Set;
 
 @Entity(name = "course_groups")
-@Table
+@Table(name = "course_groups", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"course_id", "group_number"}, name = "uk_course_group_number")
+})
 @Data
 @ToString(exclude = {"course", "teacher", "enrollments", "meetings"})
 @EqualsAndHashCode(exclude = {"course", "teacher", "enrollments", "meetings"})
@@ -20,7 +22,7 @@ public class CourseGroup {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long courseGroupId;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private Integer groupNumber;
 
     @Column(nullable = false)

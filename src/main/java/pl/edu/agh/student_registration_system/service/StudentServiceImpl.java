@@ -1,6 +1,6 @@
 package pl.edu.agh.student_registration_system.service;
 
-import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -16,9 +16,9 @@ import pl.edu.agh.student_registration_system.payload.response.*;
 import pl.edu.agh.student_registration_system.repository.*;
 
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -58,11 +58,7 @@ public class StudentServiceImpl implements StudentService {
     public StudentResponse updateStudent(Long studentId, UpdateStudentDTO updateStudentDto) {
         log.info("Attempting to update student with ID: {}", studentId);
         Student student = findStudentById(studentId);
-        User user = Optional.ofNullable(student.getUser())
-                .orElseThrow(() -> {
-                    log.error("Data inconsistency: Student {} has no associated User.", studentId);
-                    return new IllegalStateException("Student is missing associated User data.");
-                });
+        User user = student.getUser();
 
         boolean changed = false;
 
@@ -95,7 +91,6 @@ public class StudentServiceImpl implements StudentService {
         if (changed) {
             User updatedUser = userRepository.save(user);
             log.info("User {} (student {}) updated successfully.", updatedUser.getUserId(), studentId);
-            student.setUser(updatedUser);
         } else {
             log.info("No changes detected for student with ID: {}", studentId);
         }
@@ -110,15 +105,9 @@ public class StudentServiceImpl implements StudentService {
         Student student = findStudentById(studentId);
         User userToDelete = student.getUser();
 
-        if (userToDelete != null) {
-            log.warn("Deleting user {} which will cascade delete student profile {}", userToDelete.getUserId(), studentId);
-            userRepository.delete(userToDelete);
-            log.info("User {} and associated student profile {} deleted successfully.", userToDelete.getUserId(), studentId);
-        } else {
-            log.warn("Student {} has no associated user. Deleting student profile only.", studentId);
-            studentRepository.delete(student);
-            log.info("Student profile {} deleted (no associated user found).", studentId);
-        }
+        log.warn("Deleting user {} which will cascade delete student profile {}", userToDelete.getUserId(), studentId);
+        userRepository.delete(userToDelete);
+        log.info("User {} and associated student profile {} deleted successfully.", userToDelete.getUserId(), studentId);
     }
 
     @Override
@@ -127,14 +116,20 @@ public class StudentServiceImpl implements StudentService {
         log.debug("Searching for students with query: '{}', pageable: {}", search, pageable);
 
         Specification<Student> spec = (root, query, cb) -> {
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                root.fetch("user", JoinType.INNER).fetch("role", JoinType.INNER);
+            }
+            query.distinct(true);
+
             if (search == null || search.isBlank()) {
                 return cb.conjunction();
             }
             String pattern = "%" + search.toLowerCase() + "%";
 
-            Predicate firstNameMatch = cb.like(cb.lower(root.get("user").get("firstName")), pattern);
-            Predicate lastNameMatch = cb.like(cb.lower(root.get("user").get("lastName")), pattern);
-            Predicate emailMatch = cb.like(cb.lower(root.get("user").get("email")), pattern);
+            Join<Student, User> userJoin = root.join("user");
+            Predicate firstNameMatch = cb.like(cb.lower(userJoin.get("firstName")), pattern);
+            Predicate lastNameMatch = cb.like(cb.lower(userJoin.get("lastName")), pattern);
+            Predicate emailMatch = cb.like(cb.lower(userJoin.get("email")), pattern);
             Predicate indexNumberMatch = cb.like(cb.lower(root.get("indexNumber")), pattern);
 
             return cb.or(firstNameMatch, lastNameMatch, emailMatch, indexNumberMatch);
@@ -189,9 +184,50 @@ public class StudentServiceImpl implements StudentService {
     }
 
     @Override
-    @Transactional(readOnly = true) //TODO
+    @Transactional(readOnly = true)
     public List<AttendanceResponse> getCurrentStudentAttendance(Long groupId, Long courseId, Integer meetingNumber) {
-        return null;
+        log.debug("Fetching attendance for current student. Filters: groupId={}, courseId={}, meetingNumber={}",
+                groupId, courseId, meetingNumber);
+        Student currentStudent = findCurrentStudentEntity();
+
+        Specification<Attendance> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("student"), currentStudent));
+
+            Join<Attendance, Meeting> meetingJoin = root.join("meeting");
+
+            if (groupId != null) {
+                predicates.add(cb.equal(meetingJoin.get("group").get("courseGroupId"), groupId));
+            }
+            if (courseId != null) {
+
+                Join<Meeting, CourseGroup> groupJoin = meetingJoin.join("group");
+                predicates.add(cb.equal(groupJoin.get("course").get("courseId"), courseId));
+            }
+            if (meetingNumber != null) {
+                predicates.add(cb.equal(meetingJoin.get("meetingNumber"), meetingNumber));
+            }
+
+
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                root.fetch("student", JoinType.INNER).fetch("user", JoinType.INNER);
+                Fetch<Attendance, Meeting> meetingFetch = root.fetch("meeting", JoinType.INNER);
+                Fetch<Meeting, CourseGroup> groupFetch = meetingFetch.fetch("group", JoinType.INNER);
+                groupFetch.fetch("course", JoinType.INNER);
+                Fetch<CourseGroup, Teacher> teacherFetch = groupFetch.fetch("teacher", JoinType.LEFT);
+                if (teacherFetch != null) {
+                    teacherFetch.fetch("user", JoinType.LEFT);
+                }
+                root.fetch("recordedByTeacher", JoinType.INNER).fetch("user", JoinType.INNER);
+            }
+            query.orderBy(cb.asc(meetingJoin.get("meetingDate")), cb.asc(meetingJoin.get("meetingNumber")));
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        List<Attendance> attendanceList = attendanceRepository.findAll(spec);
+        log.debug("Found {} attendance records for student {}", attendanceList.size(), currentStudent.getStudentId());
+        return attendanceList.stream().map(this::mapToAttendanceResponse).collect(Collectors.toList());
     }
 
 
@@ -221,17 +257,24 @@ public class StudentServiceImpl implements StudentService {
     public StudentResponse mapToStudentResponse(Student student) {
         if (student == null) return null;
 
-        User user = Optional.ofNullable(student.getUser())
-                .orElseThrow(() -> new IllegalStateException("Student (ID: " + student.getStudentId() + ") is missing associated User data."));
+        User user = student.getUser();
+        if (user == null) {
+            log.error("Student (ID: {}) is missing associated User data.", student.getStudentId());
+            throw new IllegalStateException("Student (ID: " + student.getStudentId() + ") is missing associated User data.");
+        }
+        if (user.getRole() == null) {
+            log.error("User (ID: {}) associated with Student (ID: {}) is missing Role data.", user.getUserId(), student.getStudentId());
+            throw new IllegalStateException("User (ID: " + user.getUserId() + ") is missing Role data.");
+        }
+
 
         Long userId = user.getUserId();
         String usernameOrEmail = user.getEmail();
         String firstName = user.getFirstName();
         String lastName = user.getLastName();
         Boolean isActive = user.getIsActive();
-        List<String> roles = Optional.ofNullable(user.getRole())
-                .map(role -> List.of(role.getRoleName().name()))
-                .orElse(Collections.emptyList());
+
+        List<String> roles = List.of(user.getRole().getRoleName().name());
 
         LoginResponse userInfo = new LoginResponse(userId, usernameOrEmail, firstName, lastName, isActive, roles);
 
@@ -266,8 +309,8 @@ public class StudentServiceImpl implements StudentService {
         User teacherUser = teacher.getUser();
         return new TeacherMinimalResponse(
                 teacher.getTeacherId(),
-                teacherUser != null ? teacherUser.getFirstName() : "Brak danych",
-                teacherUser != null ? teacherUser.getLastName() : "Brak danych",
+                teacherUser != null ? teacherUser.getFirstName() : null,
+                teacherUser != null ? teacherUser.getLastName() : null,
                 teacher.getTitle()
         );
     }
@@ -291,8 +334,8 @@ public class StudentServiceImpl implements StudentService {
         User user = student.getUser();
         return new StudentMinimalResponse(
                 student.getStudentId(),
-                user != null ? user.getFirstName() : "Brak danych",
-                user != null ? user.getLastName() : "Brak danych",
+                user != null ? user.getFirstName() : null,
+                user != null ? user.getLastName() : null,
                 student.getIndexNumber()
         );
     }
