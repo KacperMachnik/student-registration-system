@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.edu.agh.student_registration_system.exceptions.InvalidOperationException;
 import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
 import pl.edu.agh.student_registration_system.model.CourseGroup;
 import pl.edu.agh.student_registration_system.model.Meeting;
@@ -13,6 +14,7 @@ import pl.edu.agh.student_registration_system.repository.CourseGroupRepository;
 import pl.edu.agh.student_registration_system.repository.MeetingRepository;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,13 +27,33 @@ public class MeetingServiceImpl implements MeetingService {
 
     private final MeetingRepository meetingRepository;
     private final CourseGroupRepository courseGroupRepository;
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+
 
     @Override
     @Transactional
     public List<MeetingResponse> defineMeetingsForGroup(Long groupId, DefineMeetingDTO defineMeetingDto) {
-        log.info("Defining {} meetings for group ID: {}", defineMeetingDto.getNumberOfMeetings(), groupId);
-        CourseGroup group = courseGroupRepository.findById(groupId)
+        log.info("Defining {} meetings for group ID: {} starting from {}",
+                defineMeetingDto.getNumberOfMeetings(), groupId, defineMeetingDto.getFirstMeetingDateTime());
+
+        CourseGroup group = courseGroupRepository.findByIdWithDetails(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseGroup", "id", groupId));
+
+        if (group.getCourse() == null) {
+            log.error("CourseGroup with ID {} does not have an associated Course. Cannot generate default topics.", groupId);
+            throw new IllegalStateException("CourseGroup is missing its associated Course.");
+        }
+
+        List<String> providedTopics = defineMeetingDto.getTopics();
+        if (providedTopics != null && !providedTopics.isEmpty() && providedTopics.size() != defineMeetingDto.getNumberOfMeetings()) {
+            log.warn("Number of provided topics ({}) does not match the number of meetings to be created ({}).",
+                    providedTopics.size(), defineMeetingDto.getNumberOfMeetings());
+            throw new InvalidOperationException(
+                    "If 'topics' list is provided, it must contain exactly " +
+                            defineMeetingDto.getNumberOfMeetings() + " elements, or be null/empty to use default topic generation."
+            );
+        }
+
 
         int lastMeetingNumber = meetingRepository.findTopByGroupOrderByMeetingNumberDesc(group)
                 .map(Meeting::getMeetingNumber)
@@ -39,13 +61,28 @@ public class MeetingServiceImpl implements MeetingService {
 
         List<Meeting> meetingsToCreate = new ArrayList<>();
         LocalDateTime currentDateTime = defineMeetingDto.getFirstMeetingDateTime();
+        String fallbackTopic = defineMeetingDto.getTopic();
 
-        for (int i = 1; i <= defineMeetingDto.getNumberOfMeetings(); i++) {
+        for (int i = 0; i < defineMeetingDto.getNumberOfMeetings(); i++) {
             Meeting meeting = new Meeting();
             meeting.setGroup(group);
-            meeting.setMeetingNumber(lastMeetingNumber + i);
+            int currentMeetingNumber = lastMeetingNumber + i + 1;
+            meeting.setMeetingNumber(currentMeetingNumber);
             meeting.setMeetingDate(currentDateTime);
-            meeting.setTopic(defineMeetingDto.getTopic());
+
+            String meetingTopic;
+            if (providedTopics != null && !providedTopics.isEmpty()) {
+                meetingTopic = providedTopics.get(i);
+                if (meetingTopic == null || meetingTopic.isBlank()) {
+                    meetingTopic = group.getCourse().getCourseName() + " - Spotkanie " + currentMeetingNumber;
+                }
+            } else if (fallbackTopic != null && !fallbackTopic.isBlank()) {
+                meetingTopic = fallbackTopic + " - Spotkanie " + currentMeetingNumber;
+            } else {
+                meetingTopic = group.getCourse().getCourseName() + " - Spotkanie " + currentMeetingNumber;
+            }
+            meeting.setTopic(meetingTopic);
+
             meetingsToCreate.add(meeting);
             currentDateTime = currentDateTime.plusWeeks(1);
         }
@@ -61,8 +98,10 @@ public class MeetingServiceImpl implements MeetingService {
     @Transactional(readOnly = true)
     public List<MeetingResponse> getMeetingsByGroupId(Long groupId) {
         log.info("Fetching meetings for group ID: {}", groupId);
-        CourseGroup group = courseGroupRepository.findById(groupId)
-                .orElseThrow(() -> new ResourceNotFoundException("CourseGroup", "id", groupId));
+        if (!courseGroupRepository.existsById(groupId)) {
+            throw new ResourceNotFoundException("CourseGroup", "id", groupId);
+        }
+        CourseGroup group = courseGroupRepository.getReferenceById(groupId);
         List<Meeting> meetings = meetingRepository.findByGroupOrderByMeetingNumber(group);
         return meetings.stream()
                 .map(this::mapToMeetingResponse)
@@ -70,12 +109,13 @@ public class MeetingServiceImpl implements MeetingService {
     }
 
     private MeetingResponse mapToMeetingResponse(Meeting meeting) {
+        if (meeting == null) return null;
         return new MeetingResponse(
                 meeting.getMeetingId(),
                 meeting.getMeetingNumber(),
-                meeting.getMeetingDate() != null ? meeting.getMeetingDate().toLocalDate().toString() : null,
+                meeting.getMeetingDate() != null ? meeting.getMeetingDate().format(DATE_FORMATTER) : null,
                 meeting.getTopic(),
-                meeting.getGroup().getCourseGroupId()
+                meeting.getGroup() != null ? meeting.getGroup().getCourseGroupId() : null
         );
     }
 }
