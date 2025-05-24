@@ -1,8 +1,11 @@
 package pl.edu.agh.student_registration_system.exceptions;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -69,6 +73,13 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
     }
 
+    @ExceptionHandler({AccessDeniedException.class})
+    public ResponseEntity<MessageResponse> handleAccessDeniedException(AccessDeniedException ex) {
+        log.warn("Access Denied: {}", ex.getMessage());
+        MessageResponse response = new MessageResponse("Access Denied: You do not have permission to perform this action.");
+        return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
+    }
+
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<MessageResponse> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
         MessageResponse response = new MessageResponse(ex.getMessage());
@@ -98,16 +109,26 @@ public class GlobalExceptionHandler {
         MessageResponse response = new MessageResponse(ex.getMessage());
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
+    @ExceptionHandler(UnexpectedRollbackException.class)
+    public ResponseEntity<MessageResponse> handleUnexpectedRollbackException(UnexpectedRollbackException ex) {
+        Throwable cause = ex.getRootCause();
+        String message = "Transaction unexpectedly rolled back.";
+        if (cause != null) {
+            message += " Root cause: " + cause.getMessage();
+        }
+        MessageResponse response = new MessageResponse(message);
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<MessageResponse> handleGenericRuntimeException(RuntimeException ex) {
-        MessageResponse response = new MessageResponse("An unexpected error occurred. Please try again later.");
+        MessageResponse response = new MessageResponse("An unexpected error occurred. Please try again later. Error:"+ex.getMessage());
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<MessageResponse> handleGenericException(Exception ex) {
-        MessageResponse response = new MessageResponse("An unexpected server error occurred.");
+        MessageResponse response = new MessageResponse("An unexpected server error occurred: "+ ex.getMessage());
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

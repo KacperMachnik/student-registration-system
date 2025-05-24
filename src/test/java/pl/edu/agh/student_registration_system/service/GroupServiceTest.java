@@ -1,6 +1,5 @@
 package pl.edu.agh.student_registration_system.service;
 
-import jakarta.persistence.criteria.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,7 +21,6 @@ import pl.edu.agh.student_registration_system.repository.CourseRepository;
 import pl.edu.agh.student_registration_system.repository.EnrollmentRepository;
 import pl.edu.agh.student_registration_system.repository.TeacherRepository;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,6 +54,7 @@ class GroupServiceTest {
 
     private Course testCourse;
     private Teacher testTeacher;
+    private Teacher testTeacher2;
     private CourseGroup testGroup;
     private Student testStudent;
     private User testUser;
@@ -70,10 +69,29 @@ class GroupServiceTest {
         testUser.setLastName("Doe");
         testUser.setEmail("john.doe@example.com");
 
+
+        Role teacherRole = new Role(RoleType.TEACHER);
+        teacherRole.setRoleId(1L);
+        testUser.setRole(teacherRole);
+
+
         testTeacher = new Teacher();
         testTeacher.setTeacherId(1L);
         testTeacher.setTitle("Professor");
         testTeacher.setUser(testUser);
+
+        User testUser2 = new User();
+        testUser2.setUserId(2L);
+        testUser2.setFirstName("Jane");
+        testUser2.setLastName("Smith");
+        testUser2.setEmail("jane.smith@example.com");
+        testUser2.setRole(teacherRole);
+
+
+        testTeacher2 = new Teacher();
+        testTeacher2.setTeacherId(2L);
+        testTeacher2.setTitle("Associate Professor");
+        testTeacher2.setUser(testUser2);
 
         testCourse = new Course();
         testCourse.setCourseId(1L);
@@ -92,7 +110,15 @@ class GroupServiceTest {
         testStudent = new Student();
         testStudent.setStudentId(1L);
         testStudent.setIndexNumber("123456");
-        testStudent.setUser(testUser);
+        User studentUser = new User();
+        studentUser.setUserId(3L);
+        studentUser.setFirstName("Alice");
+        studentUser.setLastName("Student");
+        Role studentRole = new Role(RoleType.STUDENT);
+        studentRole.setRoleId(2L);
+        studentUser.setRole(studentRole);
+        testStudent.setUser(studentUser);
+
 
         createGroupDTO = new CreateGroupDTO();
         createGroupDTO.setCourseId(1L);
@@ -122,24 +148,24 @@ class GroupServiceTest {
 
         assertNotNull(result);
         assertEquals(2L, result.getGroupId());
-        assertEquals(2, result.getGroupNumber());
-        assertEquals(25, result.getMaxCapacity());
+        assertEquals(createGroupDTO.getGroupNumber(), result.getGroupNumber());
+        assertEquals(createGroupDTO.getMaxCapacity(), result.getMaxCapacity());
         assertEquals(0, result.getEnrolledCount());
         assertNotNull(result.getCourse());
-        assertEquals(1L, result.getCourse().getCourseId());
+        assertEquals(testCourse.getCourseId(), result.getCourse().getCourseId());
         assertNotNull(result.getTeacher());
-        assertEquals(1L, result.getTeacher().getTeacherId());
+        assertEquals(testTeacher.getTeacherId(), result.getTeacher().getTeacherId());
 
         verify(courseRepository).findById(1L);
-        verify(courseGroupRepository).existsByCourseAndGroupNumber(testCourse, 2);
+        verify(courseGroupRepository).existsByCourseAndGroupNumber(testCourse, createGroupDTO.getGroupNumber());
         verify(teacherRepository).findById(1L);
         verify(courseGroupRepository).save(courseGroupCaptor.capture());
 
         CourseGroup capturedGroup = courseGroupCaptor.getValue();
         assertEquals(testCourse, capturedGroup.getCourse());
         assertEquals(testTeacher, capturedGroup.getTeacher());
-        assertEquals(2, capturedGroup.getGroupNumber());
-        assertEquals(25, capturedGroup.getMaxCapacity());
+        assertEquals(createGroupDTO.getGroupNumber(), capturedGroup.getGroupNumber());
+        assertEquals(createGroupDTO.getMaxCapacity(), capturedGroup.getMaxCapacity());
     }
 
     @Test
@@ -157,12 +183,12 @@ class GroupServiceTest {
     @Test
     void createGroup_ShouldThrowDataIntegrityViolationException_WhenGroupNumberExists() {
         when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
-        when(courseGroupRepository.existsByCourseAndGroupNumber(testCourse, 2)).thenReturn(true);
+        when(courseGroupRepository.existsByCourseAndGroupNumber(testCourse, createGroupDTO.getGroupNumber())).thenReturn(true);
 
         assertThrows(DataIntegrityViolationException.class, () -> groupService.createGroup(createGroupDTO));
 
         verify(courseRepository).findById(1L);
-        verify(courseGroupRepository).existsByCourseAndGroupNumber(testCourse, 2);
+        verify(courseGroupRepository).existsByCourseAndGroupNumber(testCourse, createGroupDTO.getGroupNumber());
         verify(teacherRepository, never()).findById(anyLong());
         verify(courseGroupRepository, never()).save(any());
     }
@@ -175,14 +201,14 @@ class GroupServiceTest {
         GroupResponse result = groupService.getGroupResponseById(1L);
 
         assertNotNull(result);
-        assertEquals(1L, result.getGroupId());
-        assertEquals(1, result.getGroupNumber());
-        assertEquals(30, result.getMaxCapacity());
+        assertEquals(testGroup.getCourseGroupId(), result.getGroupId());
+        assertEquals(testGroup.getGroupNumber(), result.getGroupNumber());
+        assertEquals(testGroup.getMaxCapacity(), result.getMaxCapacity());
         assertEquals(15, result.getEnrolledCount());
         assertNotNull(result.getCourse());
-        assertEquals(1L, result.getCourse().getCourseId());
+        assertEquals(testCourse.getCourseId(), result.getCourse().getCourseId());
         assertNotNull(result.getTeacher());
-        assertEquals(1L, result.getTeacher().getTeacherId());
+        assertEquals(testTeacher.getTeacherId(), result.getTeacher().getTeacherId());
 
         verify(courseGroupRepository).findByIdWithDetails(1L);
         verify(enrollmentRepository).countByGroup(testGroup);
@@ -198,6 +224,26 @@ class GroupServiceTest {
     }
 
     @Test
+    void updateGroup_ShouldUpdateGroupSuccessfully() {
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(testGroup));
+        when(teacherRepository.findById(2L)).thenReturn(Optional.of(testTeacher2));
+        when(courseGroupRepository.existsByCourseAndGroupNumberAndCourseGroupIdNot(testCourse, 3, 1L)).thenReturn(false);
+        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(20);
+        when(courseGroupRepository.save(any(CourseGroup.class))).thenReturn(testGroup);
+
+        GroupResponse result = groupService.updateGroup(1L, updateGroupDTO);
+
+        assertNotNull(result);
+        verify(courseGroupRepository).save(courseGroupCaptor.capture());
+        CourseGroup captured = courseGroupCaptor.getValue();
+
+        assertEquals(testTeacher2, captured.getTeacher());
+        assertEquals(updateGroupDTO.getGroupNumber(), captured.getGroupNumber());
+        assertEquals(updateGroupDTO.getMaxCapacity(), captured.getMaxCapacity());
+    }
+
+
+    @Test
     void updateGroup_ShouldThrowResourceNotFoundException_WhenGroupNotFound() {
         when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.empty());
 
@@ -208,41 +254,42 @@ class GroupServiceTest {
     }
 
     @Test
-    void updateGroup_ShouldThrowResourceNotFoundException_WhenTeacherNotFound() {
+    void updateGroup_ShouldThrowResourceNotFoundException_WhenTeacherNotFoundForUpdate() {
         when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(testGroup));
-        when(teacherRepository.findById(2L)).thenReturn(Optional.empty());
+        UpdateGroupDTO dtoWithTeacher = new UpdateGroupDTO();
+        dtoWithTeacher.setTeacherId(99L);
+        when(teacherRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> groupService.updateGroup(1L, updateGroupDTO));
+        assertThrows(ResourceNotFoundException.class, () -> groupService.updateGroup(1L, dtoWithTeacher));
 
         verify(courseGroupRepository).findByIdWithDetails(1L);
-        verify(teacherRepository).findById(2L);
+        verify(teacherRepository).findById(99L);
         verify(courseGroupRepository, never()).save(any());
     }
 
     @Test
-    void updateGroup_ShouldThrowDataIntegrityViolationException_WhenGroupNumberExists() {
+    void updateGroup_ShouldThrowDataIntegrityViolationException_WhenUpdatedGroupNumberExistsForCourse() {
         when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(testGroup));
-        when(courseGroupRepository.existsByCourseAndGroupNumberAndCourseGroupIdNot(testCourse, 3, 1L)).thenReturn(true);
+        UpdateGroupDTO dtoWithExistingNumber = new UpdateGroupDTO();
+        dtoWithExistingNumber.setGroupNumber(5);
+        when(courseGroupRepository.existsByCourseAndGroupNumberAndCourseGroupIdNot(testGroup.getCourse(), 5, 1L)).thenReturn(true);
 
-        UpdateGroupDTO groupNumberOnlyDTO = new UpdateGroupDTO();
-        groupNumberOnlyDTO.setGroupNumber(3);
-
-        assertThrows(DataIntegrityViolationException.class, () -> groupService.updateGroup(1L, groupNumberOnlyDTO));
+        assertThrows(DataIntegrityViolationException.class, () -> groupService.updateGroup(1L, dtoWithExistingNumber));
 
         verify(courseGroupRepository).findByIdWithDetails(1L);
-        verify(courseGroupRepository).existsByCourseAndGroupNumberAndCourseGroupIdNot(testCourse, 3, 1L);
+        verify(courseGroupRepository).existsByCourseAndGroupNumberAndCourseGroupIdNot(testGroup.getCourse(), 5, 1L);
         verify(courseGroupRepository, never()).save(any());
     }
 
     @Test
     void updateGroup_ShouldThrowIllegalArgumentException_WhenNewCapacityLessThanEnrolledCount() {
         when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(testGroup));
-        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(40);
+        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(20);
 
-        UpdateGroupDTO capacityOnlyDTO = new UpdateGroupDTO();
-        capacityOnlyDTO.setMaxCapacity(35);
+        UpdateGroupDTO dtoWithLowerCapacity = new UpdateGroupDTO();
+        dtoWithLowerCapacity.setMaxCapacity(15);
 
-        assertThrows(IllegalArgumentException.class, () -> groupService.updateGroup(1L, capacityOnlyDTO));
+        assertThrows(IllegalArgumentException.class, () -> groupService.updateGroup(1L, dtoWithLowerCapacity));
 
         verify(courseGroupRepository).findByIdWithDetails(1L);
         verify(enrollmentRepository).countByGroup(testGroup);
@@ -251,35 +298,35 @@ class GroupServiceTest {
 
     @Test
     void deleteGroup_ShouldDeleteGroup_WhenGroupExists() {
-        when(courseGroupRepository.existsById(1L)).thenReturn(true);
-        doNothing().when(courseGroupRepository).deleteById(1L);
+        when(courseGroupRepository.findById(1L)).thenReturn(Optional.of(testGroup));
+        doNothing().when(courseGroupRepository).delete(any(CourseGroup.class));
 
         groupService.deleteGroup(1L);
 
-        verify(courseGroupRepository).existsById(1L);
-        verify(courseGroupRepository).deleteById(1L);
+        verify(courseGroupRepository).findById(1L);
+        verify(courseGroupRepository).delete(testGroup);
     }
 
     @Test
     void deleteGroup_ShouldThrowResourceNotFoundException_WhenGroupNotFound() {
-        when(courseGroupRepository.existsById(1L)).thenReturn(false);
-
+        when(courseGroupRepository.findById(1L)).thenReturn(Optional.empty());
         assertThrows(ResourceNotFoundException.class, () -> groupService.deleteGroup(1L));
 
-        verify(courseGroupRepository).existsById(1L);
-        verify(courseGroupRepository, never()).deleteById(anyLong());
+        verify(courseGroupRepository).findById(1L);
+        verify(courseGroupRepository, never()).delete(any(CourseGroup.class));
     }
 
     @Test
     void deleteGroup_ShouldThrowDeletionBlockedException_WhenDataIntegrityViolationOccurs() {
-        when(courseGroupRepository.existsById(1L)).thenReturn(true);
-        doThrow(DataIntegrityViolationException.class).when(courseGroupRepository).deleteById(1L);
+        when(courseGroupRepository.findById(1L)).thenReturn(Optional.of(testGroup));
+        doThrow(new DataIntegrityViolationException("Simulated DIVE for delete")).when(courseGroupRepository).delete(any(CourseGroup.class));
 
         assertThrows(DeletionBlockedException.class, () -> groupService.deleteGroup(1L));
 
-        verify(courseGroupRepository).existsById(1L);
-        verify(courseGroupRepository).deleteById(1L);
+        verify(courseGroupRepository).findById(1L);
+        verify(courseGroupRepository).delete(testGroup);
     }
+
 
     @Test
     void getGroupsByCourseId_ShouldReturnListOfGroupResponses_WhenCourseExists() {
@@ -313,13 +360,13 @@ class GroupServiceTest {
     void deleteAllGroupsByCourseId_ShouldDeleteAllGroups_WhenCourseExists() {
         when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
         when(courseGroupRepository.findByCourse(testCourse)).thenReturn(List.of(testGroup));
-        doNothing().when(courseGroupRepository).deleteAll(anyList());
+        doNothing().when(courseGroupRepository).deleteAllInBatch(anyList());
 
         groupService.deleteAllGroupsByCourseId(1L);
 
         verify(courseRepository).findById(1L);
         verify(courseGroupRepository).findByCourse(testCourse);
-        verify(courseGroupRepository).deleteAll(List.of(testGroup));
+        verify(courseGroupRepository).deleteAllInBatch(List.of(testGroup));
     }
 
     @Test
@@ -330,59 +377,87 @@ class GroupServiceTest {
 
         verify(courseRepository).findById(1L);
         verify(courseGroupRepository, never()).findByCourse(any());
-        verify(courseGroupRepository, never()).deleteAll(anyList());
+        verify(courseGroupRepository, never()).deleteAllInBatch(anyList());
     }
 
     @Test
     void deleteAllGroupsByCourseId_ShouldThrowDeletionBlockedException_WhenDataIntegrityViolationOccurs() {
         when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
         when(courseGroupRepository.findByCourse(testCourse)).thenReturn(List.of(testGroup));
-        doThrow(DataIntegrityViolationException.class).when(courseGroupRepository).deleteAll(anyList());
+        doThrow(new DataIntegrityViolationException("Simulated DIVE")).when(courseGroupRepository).deleteAllInBatch(anyList());
 
         assertThrows(DeletionBlockedException.class, () -> groupService.deleteAllGroupsByCourseId(1L));
 
         verify(courseRepository).findById(1L);
         verify(courseGroupRepository).findByCourse(testCourse);
-        verify(courseGroupRepository).deleteAll(List.of(testGroup));
+        verify(courseGroupRepository).deleteAllInBatch(List.of(testGroup));
     }
 
     @Test
     void findAvailableGroupsForStudent_ShouldReturnPageOfGroupAvailabilityResponses() {
         Pageable pageable = Pageable.unpaged();
-        Page<CourseGroup> groupPage = new PageImpl<>(List.of(testGroup));
+        CourseGroup group2 = new CourseGroup();
+        group2.setCourseGroupId(2L);
+        group2.setCourse(testCourse);
+        group2.setGroupNumber(2);
+        group2.setMaxCapacity(20);
+
+
+        List<CourseGroup> queriedGroups = List.of(testGroup, group2);
+        Page<CourseGroup> groupPage = new PageImpl<>(queriedGroups, pageable, queriedGroups.size());
 
         when(studentService.findCurrentStudentEntity()).thenReturn(testStudent);
-        when(enrollmentRepository.findCourseIdsByStudent(testStudent)).thenReturn(List.of(2L));
+        when(enrollmentRepository.findCourseIdsByStudent(testStudent)).thenReturn(List.of(99L));
         when(courseGroupRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(groupPage);
-        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(15);
 
-        Page<GroupAvailabilityResponse> result = groupService.findAvailableGroupsForStudent(1L, "CS", pageable);
+
+        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(15);
+        when(enrollmentRepository.countByGroup(group2)).thenReturn(20);
+
+
+
+        Page<GroupAvailabilityResponse> result = groupService.findAvailableGroupsForStudent(null, null, pageable);
 
         assertNotNull(result);
-        assertEquals(1, result.getTotalElements());
-        assertEquals(1L, result.getContent().get(0).getGroupId());
-        assertEquals(15, result.getContent().get(0).getEnrolledCount());
-        assertEquals(15, result.getContent().get(0).getAvailableSlots());
+
+        assertEquals(1, result.getContent().size());
+        assertEquals(queriedGroups.size(), result.getTotalElements());
+        GroupAvailabilityResponse availableGroup = result.getContent().get(0);
+        assertEquals(testGroup.getCourseGroupId(), availableGroup.getGroupId());
+        assertEquals(15, availableGroup.getEnrolledCount());
+        assertEquals(15, availableGroup.getAvailableSlots());
 
         verify(studentService).findCurrentStudentEntity();
         verify(enrollmentRepository).findCourseIdsByStudent(testStudent);
         verify(courseGroupRepository).findAll(any(Specification.class), eq(pageable));
-        verify(enrollmentRepository).countByGroup(testGroup);
+        verify(enrollmentRepository, times(2)).countByGroup(any(CourseGroup.class));
     }
+
 
     @Test
     void getEnrolledStudents_ShouldReturnPageOfStudentResponses_WhenGroupExists() {
         Pageable pageable = Pageable.unpaged();
         Page<Student> studentPage = new PageImpl<>(List.of(testStudent));
 
+
+        StudentResponse studentResponse = new StudentResponse(
+                testStudent.getStudentId(),
+                testStudent.getIndexNumber(),
+                new LoginResponse(testStudent.getUser().getUserId(), testStudent.getUser().getEmail(), testStudent.getUser().getFirstName(), testStudent.getUser().getLastName(), true, List.of("STUDENT"))
+        );
+
+
         when(courseGroupRepository.existsById(1L)).thenReturn(true);
         when(enrollmentRepository.findStudentsByGroupId(1L, pageable)).thenReturn(studentPage);
-        when(studentService.mapToStudentResponse(testStudent)).thenReturn(new StudentResponse());
+        when(studentService.mapToStudentResponse(testStudent)).thenReturn(studentResponse);
 
         Page<StudentResponse> result = groupService.getEnrolledStudents(1L, pageable);
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
+        assertEquals(1, result.getContent().size());
+        assertEquals(studentResponse, result.getContent().get(0));
+
 
         verify(courseGroupRepository).existsById(1L);
         verify(enrollmentRepository).findStudentsByGroupId(1L, pageable);

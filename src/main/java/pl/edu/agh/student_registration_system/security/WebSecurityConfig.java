@@ -85,6 +85,7 @@ public class WebSecurityConfig {
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
+                        .requestMatchers("/error").permitAll()
 
                         .requestMatchers("/api/users/register/**").hasAuthority(RoleType.DEANERY_STAFF.name())
 
@@ -92,36 +93,35 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/enrollments/my/**").hasAuthority(RoleType.STUDENT.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/enrollments/my/**").hasAuthority(RoleType.STUDENT.name())
                         .requestMatchers(HttpMethod.GET, "/api/groups/available").hasAuthority(RoleType.STUDENT.name())
-                        .requestMatchers(HttpMethod.GET, "/api/students/me/groups").hasAuthority(RoleType.STUDENT.name())
-                        .requestMatchers(HttpMethod.GET, "/api/students/me/grades").hasAuthority(RoleType.STUDENT.name())
-                        .requestMatchers(HttpMethod.GET, "/api/students/me/attendance").hasAuthority(RoleType.STUDENT.name())
-
 
                         .requestMatchers("/api/teachers/me/**").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.POST, "/api/grades").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.PUT, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.POST, "/api/groups/{groupId}/meetings").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.POST, "/api/meetings/{meetingId}/attendance").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.PUT, "/api/attendance/{attendanceId}").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.GET, "/api/teachers/me/courses").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.GET, "/api/teachers/me/groups").hasAuthority(RoleType.TEACHER.name())
 
 
-                        .requestMatchers("/api/students", "/api/students/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/teachers", "/api/teachers/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/courses", "/api/courses/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers("/api/groups", "/api/groups/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers(HttpMethod.POST, "/api/enrollments/admin/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers(HttpMethod.DELETE, "/api/enrollments/admin/**").hasAuthority(RoleType.DEANERY_STAFF.name())
-                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/meetings").hasAnyAuthority(RoleType.DEANERY_STAFF.name(), RoleType.TEACHER.name(), RoleType.STUDENT.name())
-                        .requestMatchers(HttpMethod.GET, "/api/meetings/{meetingId}/attendance").hasAnyAuthority(RoleType.DEANERY_STAFF.name(), RoleType.TEACHER.name())
+                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/students").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/groups/{groupId}/meetings").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/meetings").authenticated()
 
+                        .requestMatchers(HttpMethod.POST, "/api/meetings/{meetingId}/attendance").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/meetings/{meetingId}/attendance").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/attendance/{attendanceId}").authenticated()
 
                         .requestMatchers(HttpMethod.GET, "/api/courses/{courseId}").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/courses/{courseId}/groups").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/students").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/students/{studentId}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/teachers/{teacherId}").authenticated()
+
+
+
+                        .requestMatchers("/api/students/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers("/api/teachers/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers("/api/courses/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers("/api/groups/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.POST, "/api/enrollments/admin/**").hasAuthority(RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/enrollments/admin/**").hasAuthority(RoleType.DEANERY_STAFF.name())
 
 
                         .requestMatchers("/api/auth/logout").authenticated()

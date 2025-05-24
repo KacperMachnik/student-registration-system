@@ -35,7 +35,7 @@ public class TeacherServiceImpl implements TeacherService {
 
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = {ResourceNotFoundException.class})
     public Teacher findCurrentTeacherEntity() {
         log.debug("Finding current teacher entity");
         User currentUser = userService.getCurrentAuthenticatedUser();

@@ -24,10 +24,9 @@ public class GroupSecurityService {
     private final TeacherService teacherService;
 
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = {ResourceNotFoundException.class})
     public boolean isTeacherOfGroup(Long groupId) {
-        log.debug("Checking if current user is teacher of group {}", groupId);
-        log.error("WEIRD if got here");
+        log.info("Checking if current user is teacher of group {}", groupId);
         try {
             Teacher currentTeacher = teacherService.findCurrentTeacherEntity();
 
@@ -40,7 +39,7 @@ public class GroupSecurityService {
             log.debug("Access check isTeacherOfGroup for group {}: {}", groupId, isTeacher);
             return isTeacher;
         } catch (ResourceNotFoundException e) {
-            log.warn("isTeacherOfGroup check failed for group {}: Current user is not a teacher or teacher profile not found.", groupId);
+            log.error("isTeacherOfGroup check failed for group {}: Current user is not a teacher or teacher profile not found.", groupId);
             return false;
         } catch (Exception e) {
             log.error("Error during isTeacherOfGroup check for group {}: {}", groupId, e.getMessage());

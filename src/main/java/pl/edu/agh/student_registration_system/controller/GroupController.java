@@ -69,7 +69,7 @@ public class GroupController {
     @PreAuthorize("hasAuthority('DEANERY_STAFF') or (@groupSecurityService.isTeacherOfGroup(#groupId) and hasAuthority('TEACHER'))")
     public ResponseEntity<Page<StudentResponse>> getStudentsInGroup(
             @PathVariable Long groupId, Pageable pageable) {
-        log.error("CHECKING METHOD getStudentsInGroup");
+        log.info("Fetching students");
         Page<StudentResponse> page = groupService.getEnrolledStudents(groupId, pageable);
         return ResponseEntity.ok(page);
     }
