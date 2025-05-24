@@ -15,7 +15,6 @@ import pl.edu.agh.student_registration_system.repository.MeetingRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,7 +26,7 @@ public class MeetingServiceImpl implements MeetingService {
 
     private final MeetingRepository meetingRepository;
     private final CourseGroupRepository courseGroupRepository;
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
 
     @Override
@@ -89,6 +88,7 @@ public class MeetingServiceImpl implements MeetingService {
 
         List<Meeting> savedMeetings = meetingRepository.saveAll(meetingsToCreate);
         log.info("{} meetings defined and saved for group ID: {}", savedMeetings.size(), groupId);
+        log.info("Random meeting time from db {}", savedMeetings.getFirst().getMeetingDate());
         return savedMeetings.stream()
                 .map(this::mapToMeetingResponse)
                 .collect(Collectors.toList());
