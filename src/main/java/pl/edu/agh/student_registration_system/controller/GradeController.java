@@ -11,6 +11,8 @@ import pl.edu.agh.student_registration_system.payload.dto.UpdateGradeDTO;
 import pl.edu.agh.student_registration_system.payload.response.GradeResponse;
 import pl.edu.agh.student_registration_system.service.GradeService;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/grades")
 @RequiredArgsConstructor
@@ -38,4 +40,15 @@ public class GradeController {
         gradeService.deleteGrade(gradeId);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/student/{studentId}/course/{courseId}")
+    @PreAuthorize("hasAuthority('DEANERY_STAFF') or " +
+            "(hasAuthority('TEACHER') and @studentSecurityService.isTeacherAllowedToViewStudent(#studentId))")
+    public ResponseEntity<List<GradeResponse>> getStudentGradesForCourseByTeacherOrDean(
+            @PathVariable Long studentId,
+            @PathVariable Long courseId) {
+        List<GradeResponse> grades = gradeService.getGradesByStudentAndCourse(studentId, courseId);
+        return ResponseEntity.ok(grades);
+    }
+
 }

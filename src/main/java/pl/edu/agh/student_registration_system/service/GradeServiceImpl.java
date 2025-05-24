@@ -17,6 +17,7 @@ import pl.edu.agh.student_registration_system.repository.StudentRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -98,6 +99,27 @@ public class GradeServiceImpl implements GradeService {
         }
         gradeRepository.deleteById(gradeId);
         log.info("Grade (ID: {}) deleted successfully.", gradeId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GradeResponse> getGradesByStudentAndCourse(Long studentId, Long courseId) {
+        log.debug("Fetching grades for student ID: {} and course ID: {}", studentId, courseId);
+        Student student = studentRepository.findByIdWithUser(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "id", studentId));
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", "id", courseId));
+
+        List<Grade> grades = gradeRepository.findAllByStudentAndCourseWithDetails(student, course);
+
+        if (grades.isEmpty()) {
+            log.info("No grades found for student ID: {} and course ID: {}", studentId, courseId);
+        } else {
+            log.debug("{} grade(s) found for student ID: {} and course ID: {}", grades.size(), studentId, courseId);
+        }
+        return grades.stream()
+                .map(this::mapToGradeResponse)
+                .toList();
     }
 
     private GradeResponse mapToGradeResponse(Grade grade) {

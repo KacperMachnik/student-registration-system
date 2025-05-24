@@ -28,4 +28,14 @@ public interface GradeRepository extends JpaRepository<Grade, Long> {
             "JOIN FETCH t.user tu " +
             "WHERE g.student = :student")
     List<Grade> findByStudentWithDetails(@Param("student") Student student);
+
+    @Query("SELECT g FROM grades g " +
+            "JOIN FETCH g.student s " +
+            "JOIN FETCH s.user su " +
+            "JOIN FETCH g.course c " +
+            "JOIN FETCH g.teacher t " +
+            "JOIN FETCH t.user tu " +
+            "WHERE g.student = :student AND g.course = :course")
+    List<Grade> findAllByStudentAndCourseWithDetails(@Param("student") Student student, @Param("course") Course course);
+
 }
