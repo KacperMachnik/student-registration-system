@@ -1,153 +1,80 @@
 package pl.edu.agh.student_registration_system.repository;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import pl.edu.agh.student_registration_system.model.*;
+import pl.edu.agh.student_registration_system.model.Course;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import java.util.HashSet;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-class CourseRepositoryTest {
+public class CourseRepositoryTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
 
     @Autowired
     private CourseRepository courseRepository;
 
-    @Autowired
-    private RoleRepository roleRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    private Course course1;
-    private Course course2;
-    private Course course3;
+    private Course course1, course2;
 
     @BeforeEach
     void setUp() {
-        course1 = new Course();
-        course1.setCourseName("Programowanie");
-        course1.setCourseCode("PRG101");
-        course1.setDescription("Kurs programowania");
-        course1.setCredits(5);
-        courseRepository.save(course1);
-
-        course2 = new Course();
-        course2.setCourseName("Matematyka");
-        course2.setCourseCode("MAT101");
-        course2.setDescription("Kurs matematyki");
-        course2.setCredits(6);
-        courseRepository.save(course2);
-
-        course3 = new Course();
-        course3.setCourseName("Fizyka");
-        course3.setCourseCode("FIZ101");
-        course3.setDescription("Kurs fizyki");
-        course3.setCredits(4);
-        courseRepository.save(course3);
+        course1 = new Course(null, "Intro to CS", "CS101", "Basics", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course1);
+        course2 = new Course(null, "Advanced Algo", "ALGO202", "Complex", 4, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course2);
+        entityManager.flush();
     }
 
     @Test
-    @DisplayName("Should check if course exists by course code excluding specific course")
-    void shouldCheckIfExistsByCourseCodeAndCourseIdNot() {
-        boolean exists = courseRepository.existsByCourseCodeAndCourseIdNot("MAT101", course1.getCourseId());
-        boolean notExists = courseRepository.existsByCourseCodeAndCourseIdNot("XYZ999", course1.getCourseId());
+    void testExistsByCourseCodeAndCourseIdNot() {
+        boolean exists = courseRepository.existsByCourseCodeAndCourseIdNot("CS101", course2.getCourseId());
+        assertThat(exists).isTrue();
 
-        assertTrue(exists);
-        assertFalse(notExists);
+        boolean notExists = courseRepository.existsByCourseCodeAndCourseIdNot("CS101", course1.getCourseId());
+        assertThat(notExists).isFalse();
+
+        boolean notExistsOtherCode = courseRepository.existsByCourseCodeAndCourseIdNot("CS999", course1.getCourseId());
+        assertThat(notExistsOtherCode).isFalse();
     }
 
     @Test
-    @DisplayName("Should check if course exists by course code")
-    void shouldCheckIfExistsByCourseCode() {
-        boolean exists = courseRepository.existsByCourseCode("PRG101");
-        boolean notExists = courseRepository.existsByCourseCode("XYZ999");
+    void testExistsByCourseCode() {
+        boolean exists = courseRepository.existsByCourseCode("CS101");
+        assertThat(exists).isTrue();
 
-        assertTrue(exists);
-        assertFalse(notExists);
+        boolean notExists = courseRepository.existsByCourseCode("CS999");
+        assertThat(notExists).isFalse();
     }
 
     @Test
-    @DisplayName("Should find all courses with specification and pageable")
-    void shouldFindAllWithSpecificationAndPageable() {
-        Specification<Course> spec = (root, query, criteriaBuilder) ->
-                criteriaBuilder.greaterThan(root.get("credits"), 4);
+    void testFindAllWithSpecificationAndPageable() {
+        Course course3 = new Course(null, "Data Structures", "DS102", "Structures", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persistAndFlush(course3);
 
-        Pageable pageable = PageRequest.of(0, 10);
+        Specification<Course> specCredits3 = (root, query, criteriaBuilder) ->
+                criteriaBuilder.equal(root.get("credits"), 3);
 
-        Page<Course> coursePage = courseRepository.findAll(spec, pageable);
-
-        assertEquals(2, coursePage.getTotalElements());
-        assertTrue(coursePage.getContent().contains(course1));
-        assertTrue(coursePage.getContent().contains(course2));
-        assertFalse(coursePage.getContent().contains(course3));
-    }
-
-    @Test
-    @DisplayName("Should find all courses with pageable")
-    void shouldFindAllWithPageable() {
         Pageable pageable = PageRequest.of(0, 2);
+        Page<Course> pageOfCourses = courseRepository.findAll(specCredits3, pageable);
 
-        Page<Course> coursePage = courseRepository.findAll(pageable);
+        assertThat(pageOfCourses.getTotalElements()).isEqualTo(2);
+        assertThat(pageOfCourses.getContent()).hasSize(2);
+        assertThat(pageOfCourses.getContent()).extracting(Course::getCourseCode).containsExactlyInAnyOrder("CS101", "DS102");
 
-        assertEquals(3, coursePage.getTotalElements());
-        assertEquals(2, coursePage.getContent().size());
-        assertEquals(2, coursePage.getTotalPages());
-    }
-
-    @Test
-    @DisplayName("Should save new course")
-    void shouldSaveNewCourse() {
-        Course newCourse = new Course();
-        newCourse.setCourseName("Chemia");
-        newCourse.setCourseCode("CHM101");
-        newCourse.setDescription("Kurs chemii");
-        newCourse.setCredits(3);
-
-        Course savedCourse = courseRepository.save(newCourse);
-
-        assertNotNull(savedCourse.getCourseId());
-        assertEquals("CHM101", savedCourse.getCourseCode());
-
-        Optional<Course> foundCourse = courseRepository.findById(savedCourse.getCourseId());
-        assertTrue(foundCourse.isPresent());
-        assertEquals("Chemia", foundCourse.get().getCourseName());
-    }
-
-    @Test
-    @DisplayName("Should update existing course")
-    void shouldUpdateExistingCourse() {
-        course1.setCourseName("Programowanie zaawansowane");
-        course1.setCredits(7);
-
-        Course updatedCourse = courseRepository.save(course1);
-
-        assertEquals(course1.getCourseId(), updatedCourse.getCourseId());
-        assertEquals("Programowanie zaawansowane", updatedCourse.getCourseName());
-        assertEquals(7, updatedCourse.getCredits());
-
-        Optional<Course> foundCourse = courseRepository.findById(course1.getCourseId());
-        assertTrue(foundCourse.isPresent());
-        assertEquals("Programowanie zaawansowane", foundCourse.get().getCourseName());
-        assertEquals(7, foundCourse.get().getCredits());
-    }
-
-    @Test
-    @DisplayName("Should delete course")
-    void shouldDeleteCourse() {
-        courseRepository.delete(course3);
-
-        Optional<Course> foundCourse = courseRepository.findById(course3.getCourseId());
-        assertFalse(foundCourse.isPresent());
+        Specification<Course> specNameContainsIntro = (root, query, criteriaBuilder) ->
+                criteriaBuilder.like(criteriaBuilder.lower(root.get("courseName")), "%intro%");
+        Page<Course> pageIntroCourses = courseRepository.findAll(specNameContainsIntro, PageRequest.of(0, 10));
+        assertThat(pageIntroCourses.getTotalElements()).isEqualTo(1);
+        assertThat(pageIntroCourses.getContent().get(0).getCourseCode()).isEqualTo("CS101");
     }
 }

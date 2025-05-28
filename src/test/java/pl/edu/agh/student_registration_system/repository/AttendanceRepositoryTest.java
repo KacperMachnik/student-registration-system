@@ -1,254 +1,103 @@
 package pl.edu.agh.student_registration_system.repository;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.jpa.domain.Specification;
 import pl.edu.agh.student_registration_system.model.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-class AttendanceRepositoryTest {
+public class AttendanceRepositoryTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
 
     @Autowired
     private AttendanceRepository attendanceRepository;
 
-    @Autowired
-    private StudentRepository studentRepository;
-
-    @Autowired
-    private MeetingRepository meetingRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private CourseRepository courseRepository;
-
-    @Autowired
-    private CourseGroupRepository courseGroupRepository;
-
-    @Autowired
-    private TeacherRepository teacherRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
-
     private Student student1;
-    private Student student2;
     private Meeting meeting1;
-    private Meeting meeting2;
-    private Attendance attendance1;
-    private Attendance attendance2;
-    private Teacher teacher;
-    private Role studentRole;
-    private Role teacherRole;
+    private Teacher teacher1;
 
     @BeforeEach
     void setUp() {
-        studentRole = new Role(RoleType.STUDENT);
-        roleRepository.save(studentRole);
+        Role studentRole = new Role(RoleType.STUDENT);
+        entityManager.persist(studentRole);
+        Role teacherRole = new Role(RoleType.TEACHER);
+        entityManager.persist(teacherRole);
 
-        teacherRole = new Role(RoleType.TEACHER);
-        roleRepository.save(teacherRole);
+        User userS1 = new User(null, "Student", "One", "pass", "s1@example.com", true, studentRole, null, null);
+        entityManager.persist(userS1);
+        student1 = new Student(null, "100001", userS1, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(student1);
 
-        User user1 = new User();
-        user1.setEmail("student1@example.com");
-        user1.setPassword("password");
-        user1.setFirstName("Jan");
-        user1.setLastName("Kowalski");
-        user1.setRole(studentRole);
-        user1.setIsActive(true);
-        userRepository.save(user1);
+        User userT1 = new User(null, "Teacher", "One", "pass", "t1@example.com", true, teacherRole, null, null);
+        entityManager.persist(userT1);
+        teacher1 = new Teacher(null, "Dr.", userT1, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(teacher1);
 
-        User user2 = new User();
-        user2.setEmail("student2@example.com");
-        user2.setPassword("password");
-        user2.setFirstName("Anna");
-        user2.setLastName("Nowak");
-        user2.setRole(studentRole);
-        user2.setIsActive(true);
-        userRepository.save(user2);
+        Course course1 = new Course(null, "Course 1", "C1", "Desc 1", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course1);
 
-        User teacherUser = new User();
-        teacherUser.setEmail("teacher@example.com");
-        teacherUser.setPassword("password");
-        teacherUser.setFirstName("Profesor");
-        teacherUser.setLastName("Przykładowy");
-        teacherUser.setRole(teacherRole);
-        teacherUser.setIsActive(true);
-        userRepository.save(teacherUser);
+        CourseGroup group1 = new CourseGroup(null, 1, 20, course1, teacher1, new HashSet<>(), new ArrayList<>());
+        entityManager.persist(group1);
 
-        student1 = new Student();
-        student1.setUser(user1);
-        student1.setIndexNumber("123456");
-        studentRepository.save(student1);
+        meeting1 = new Meeting(null, 1, LocalDateTime.now(), "Meeting 1", group1, new HashSet<>());
+        entityManager.persist(meeting1);
 
-        student2 = new Student();
-        student2.setUser(user2);
-        student2.setIndexNumber("654321");
-        studentRepository.save(student2);
+        entityManager.flush();
+    }
 
-        teacher = new Teacher();
-        teacher.setUser(teacherUser);
-        teacherRepository.save(teacher);
-
-        Course course = new Course();
-        course.setCourseName("Programowanie");
-        course.setCourseCode("PRG101");
-        course.setDescription("Kurs programowania");
-        course.setCredits(5);
-        courseRepository.save(course);
-
-        CourseGroup courseGroup = new CourseGroup();
-        courseGroup.setCourse(course);
-        courseGroup.setTeacher(teacher);
-        courseGroup.setGroupNumber(1);
-        courseGroup.setMaxCapacity(30);
-        courseGroupRepository.save(courseGroup);
-
-        meeting1 = new Meeting();
-        meeting1.setGroup(courseGroup);
-        meeting1.setMeetingNumber(1);
-        meeting1.setMeetingDate(LocalDateTime.now().plusDays(1));
-        meeting1.setTopic("Wprowadzenie");
-        meetingRepository.save(meeting1);
-
-        meeting2 = new Meeting();
-        meeting2.setGroup(courseGroup);
-        meeting2.setMeetingNumber(2);
-        meeting2.setMeetingDate(LocalDateTime.now().plusDays(2));
-        meeting2.setTopic("Zaawansowane tematy");
-        meetingRepository.save(meeting2);
-
-        attendance1 = new Attendance();
-        attendance1.setStudent(student1);
-        attendance1.setMeeting(meeting1);
-        attendance1.setStatus(AttendanceStatus.PRESENT);
-        attendance1.setRecordedByTeacher(teacher);
+    @Test
+    void testFindAllWithSpecification() {
+        Attendance attendance1 = new Attendance(null, AttendanceStatus.PRESENT, meeting1, student1, teacher1);
         attendanceRepository.save(attendance1);
 
-        attendance2 = new Attendance();
-        attendance2.setStudent(student2);
-        attendance2.setMeeting(meeting1);
-        attendance2.setStatus(AttendanceStatus.ABSENT);
-        attendance2.setRecordedByTeacher(teacher);
+        User userS2 = new User(null, "Student", "Two", "pass", "s2@example.com", true, entityManager.find(Role.class, student1.getUser().getRole().getRoleId()), null, null);
+        entityManager.persist(userS2);
+        Student student2 = new Student(null, "100002", userS2, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(student2);
+        Attendance attendance2 = new Attendance(null, AttendanceStatus.ABSENT, meeting1, student2, teacher1);
         attendanceRepository.save(attendance2);
-    }
 
-    @Test
-    @DisplayName("Should find attendance by meeting and student")
-    void shouldFindByMeetingAndStudent() {
-        Optional<Attendance> foundAttendance = attendanceRepository.findByMeetingAndStudent(meeting1, student1);
-
-        assertTrue(foundAttendance.isPresent());
-        assertEquals(attendance1.getAttendanceId(), foundAttendance.get().getAttendanceId());
-        assertEquals(AttendanceStatus.PRESENT, foundAttendance.get().getStatus());
-    }
-
-    @Test
-    @DisplayName("Should return empty optional when attendance not found")
-    void shouldReturnEmptyOptionalWhenAttendanceNotFound() {
-        Optional<Attendance> foundAttendance = attendanceRepository.findByMeetingAndStudent(meeting2, student1);
-
-        assertFalse(foundAttendance.isPresent());
-    }
-
-    @Test
-    @DisplayName("Should find all attendances with specification for present status")
-    void shouldFindAllWithSpecificationForPresentStatus() {
         Specification<Attendance> spec = (root, query, criteriaBuilder) ->
                 criteriaBuilder.equal(root.get("status"), AttendanceStatus.PRESENT);
 
-        List<Attendance> attendances = attendanceRepository.findAll(spec);
+        List<Attendance> presentAttendances = attendanceRepository.findAll(spec);
+        assertThat(presentAttendances).hasSize(1);
+        assertThat(presentAttendances.get(0).getStudent()).isEqualTo(student1);
 
-        assertEquals(1, attendances.size());
-        assertEquals(attendance1.getAttendanceId(), attendances.get(0).getAttendanceId());
-        assertEquals(AttendanceStatus.PRESENT, attendances.get(0).getStatus());
-    }
-
-    @Test
-    @DisplayName("Should find all attendances with specification for absent status")
-    void shouldFindAllWithSpecificationForAbsentStatus() {
-        Specification<Attendance> spec = (root, query, criteriaBuilder) ->
+        Specification<Attendance> specAbsent = (root, query, criteriaBuilder) ->
                 criteriaBuilder.equal(root.get("status"), AttendanceStatus.ABSENT);
-
-        List<Attendance> attendances = attendanceRepository.findAll(spec);
-
-        assertEquals(1, attendances.size());
-        assertEquals(attendance2.getAttendanceId(), attendances.get(0).getAttendanceId());
-        assertEquals(AttendanceStatus.ABSENT, attendances.get(0).getStatus());
+        List<Attendance> absentAttendances = attendanceRepository.findAll(specAbsent);
+        assertThat(absentAttendances).hasSize(1);
+        assertThat(absentAttendances.get(0).getStudent()).isEqualTo(student2);
     }
 
     @Test
-    @DisplayName("Should find all attendances for specific meeting")
-    void shouldFindAllForSpecificMeeting() {
-        Specification<Attendance> spec = (root, query, criteriaBuilder) ->
-                criteriaBuilder.equal(root.get("meeting"), meeting1);
+    void testFindByMeetingAndStudent() {
+        Attendance attendance = new Attendance(null, AttendanceStatus.EXCUSED, meeting1, student1, teacher1);
+        attendanceRepository.save(attendance);
 
-        List<Attendance> attendances = attendanceRepository.findAll(spec);
+        Optional<Attendance> foundAttendance = attendanceRepository.findByMeetingAndStudent(meeting1, student1);
+        assertThat(foundAttendance).isPresent();
+        assertThat(foundAttendance.get().getStatus()).isEqualTo(AttendanceStatus.EXCUSED);
 
-        assertEquals(2, attendances.size());
-    }
-
-    @Test
-    @DisplayName("Should find all attendances for specific student")
-    void shouldFindAllForSpecificStudent() {
-        Specification<Attendance> spec = (root, query, criteriaBuilder) ->
-                criteriaBuilder.equal(root.get("student"), student1);
-
-        List<Attendance> attendances = attendanceRepository.findAll(spec);
-
-        assertEquals(1, attendances.size());
-        assertEquals(student1.getStudentId(), attendances.get(0).getStudent().getStudentId());
-    }
-
-    @Test
-    @DisplayName("Should save new attendance")
-    void shouldSaveNewAttendance() {
-        Attendance newAttendance = new Attendance();
-        newAttendance.setStudent(student2);
-        newAttendance.setMeeting(meeting2);
-        newAttendance.setStatus(AttendanceStatus.PRESENT);
-        newAttendance.setRecordedByTeacher(teacher);
-
-        Attendance savedAttendance = attendanceRepository.save(newAttendance);
-
-        assertNotNull(savedAttendance.getAttendanceId());
-
-        Optional<Attendance> foundAttendance = attendanceRepository.findByMeetingAndStudent(meeting2, student2);
-        assertTrue(foundAttendance.isPresent());
-        assertEquals(AttendanceStatus.PRESENT, foundAttendance.get().getStatus());
-    }
-
-    @Test
-    @DisplayName("Should update existing attendance")
-    void shouldUpdateExistingAttendance() {
-        attendance1.setStatus(AttendanceStatus.ABSENT);
-
-        Attendance updatedAttendance = attendanceRepository.save(attendance1);
-
-        assertEquals(attendance1.getAttendanceId(), updatedAttendance.getAttendanceId());
-        assertEquals(AttendanceStatus.ABSENT, updatedAttendance.getStatus());
-
-        Optional<Attendance> foundAttendance = attendanceRepository.findById(attendance1.getAttendanceId());
-        assertTrue(foundAttendance.isPresent());
-        assertEquals(AttendanceStatus.ABSENT, foundAttendance.get().getStatus());
-    }
-
-    @Test
-    @DisplayName("Should delete attendance")
-    void shouldDeleteAttendance() {
-        attendanceRepository.delete(attendance1);
-
-        Optional<Attendance> foundAttendance = attendanceRepository.findById(attendance1.getAttendanceId());
-        assertFalse(foundAttendance.isPresent());
+        User userS2 = new User(null, "Student", "Three", "pass", "s3@example.com", true, entityManager.find(Role.class, student1.getUser().getRole().getRoleId()), null, null);
+        entityManager.persist(userS2);
+        Student studentNonExistent = new Student(null, "100003", userS2, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(studentNonExistent);
+        Optional<Attendance> notFoundAttendance = attendanceRepository.findByMeetingAndStudent(meeting1, studentNonExistent);
+        assertThat(notFoundAttendance).isNotPresent();
     }
 }

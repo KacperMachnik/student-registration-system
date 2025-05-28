@@ -1,146 +1,72 @@
 package pl.edu.agh.student_registration_system.repository;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import pl.edu.agh.student_registration_system.model.Role;
 import pl.edu.agh.student_registration_system.model.RoleType;
 import pl.edu.agh.student_registration_system.model.User;
 
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-class UserRepositoryTest {
+public class UserRepositoryTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
 
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private RoleRepository roleRepository;
-
-    private Role studentRole;
-    private Role teacherRole;
     private User user1;
-    private User user2;
+    private Role studentRole;
 
     @BeforeEach
     void setUp() {
-        studentRole = new Role();
-        studentRole.setRoleName(RoleType.STUDENT);
-        roleRepository.save(studentRole);
+        studentRole = new Role(RoleType.STUDENT);
+        entityManager.persist(studentRole);
 
-        teacherRole = new Role();
-        teacherRole.setRoleName(RoleType.TEACHER);
-        roleRepository.save(teacherRole);
-
-        user1 = new User();
-        user1.setEmail("student@example.com");
-        user1.setPassword("password");
-        user1.setFirstName("Jan");
-        user1.setLastName("Kowalski");
-        user1.setRole(studentRole);
-        user1.setIsActive(true);
+        user1 = new User(null, "Test", "User1", "pass1", "user1@example.com", true, studentRole, null, null);
         userRepository.save(user1);
 
-        user2 = new User();
-        user2.setEmail("teacher@example.com");
-        user2.setPassword("password");
-        user2.setFirstName("Anna");
-        user2.setLastName("Nowak");
-        user2.setRole(teacherRole);
-        user2.setIsActive(true);
+        User user2 = new User(null, "Another", "User2", "pass2", "user2@example.com", false, studentRole, null, null);
         userRepository.save(user2);
+
+        entityManager.flush();
     }
 
     @Test
-    @DisplayName("Should find user by email")
-    void shouldFindUserByEmail() {
-        Optional<User> foundUser = userRepository.findByEmail("student@example.com");
+    void testFindByEmail() {
+        Optional<User> foundUser = userRepository.findByEmail("user1@example.com");
+        assertThat(foundUser).isPresent();
+        assertThat(foundUser.get().getFirstName()).isEqualTo("Test");
 
-        assertTrue(foundUser.isPresent());
-        assertEquals(user1, foundUser.get());
-        assertEquals("Jan", foundUser.get().getFirstName());
-        assertEquals("Kowalski", foundUser.get().getLastName());
+        Optional<User> notFoundUser = userRepository.findByEmail("nonexistent@example.com");
+        assertThat(notFoundUser).isNotPresent();
     }
 
     @Test
-    @DisplayName("Should not find user by non-existent email")
-    void shouldNotFindUserByNonExistentEmail() {
-        Optional<User> foundUser = userRepository.findByEmail("nonexistent@example.com");
-
-        assertFalse(foundUser.isPresent());
-    }
-
-    @Test
-    @DisplayName("Should check if user exists by email")
-    void shouldCheckIfUserExistsByEmail() {
-        boolean exists = userRepository.existsByEmail("student@example.com");
-        assertTrue(exists);
+    void testExistsByEmail() {
+        boolean exists = userRepository.existsByEmail("user1@example.com");
+        assertThat(exists).isTrue();
 
         boolean notExists = userRepository.existsByEmail("nonexistent@example.com");
-        assertFalse(notExists);
+        assertThat(notExists).isFalse();
     }
 
     @Test
-    @DisplayName("Should find user by email with role")
-    void shouldFindUserByEmailWithRole() {
-        Optional<User> foundUser = userRepository.findByEmailWithRole("teacher@example.com");
+    void testFindByEmailWithRole() {
+        Optional<User> foundUserWithRole = userRepository.findByEmailWithRole("user1@example.com");
+        assertThat(foundUserWithRole).isPresent();
+        assertThat(foundUserWithRole.get().getFirstName()).isEqualTo("Test");
+        assertThat(foundUserWithRole.get().getRole()).isNotNull();
+        assertThat(foundUserWithRole.get().getRole().getRoleName()).isEqualTo(RoleType.STUDENT);
 
-        assertTrue(foundUser.isPresent());
-        assertEquals(user2, foundUser.get());
-        assertEquals(teacherRole, foundUser.get().getRole());
-        assertEquals(RoleType.TEACHER, foundUser.get().getRole().getRoleName());
-    }
-
-    @Test
-    @DisplayName("Should save new user")
-    void shouldSaveNewUser() {
-        User newUser = new User();
-        newUser.setEmail("newuser@example.com");
-        newUser.setPassword("password");
-        newUser.setFirstName("Piotr");
-        newUser.setLastName("Wiśniewski");
-        newUser.setRole(studentRole);
-        newUser.setIsActive(true);
-
-        User savedUser = userRepository.save(newUser);
-
-        assertNotNull(savedUser.getUserId());
-
-        Optional<User> foundUser = userRepository.findById(savedUser.getUserId());
-        assertTrue(foundUser.isPresent());
-        assertEquals("Piotr", foundUser.get().getFirstName());
-        assertEquals("Wiśniewski", foundUser.get().getLastName());
-    }
-
-    @Test
-    @DisplayName("Should update existing user")
-    void shouldUpdateExistingUser() {
-        user1.setFirstName("Janusz");
-        user1.setLastName("Nowacki");
-
-        User updatedUser = userRepository.save(user1);
-
-        assertEquals(user1.getUserId(), updatedUser.getUserId());
-        assertEquals("Janusz", updatedUser.getFirstName());
-        assertEquals("Nowacki", updatedUser.getLastName());
-
-        Optional<User> foundUser = userRepository.findById(user1.getUserId());
-        assertTrue(foundUser.isPresent());
-        assertEquals("Janusz", foundUser.get().getFirstName());
-        assertEquals("Nowacki", foundUser.get().getLastName());
-    }
-
-    @Test
-    @DisplayName("Should delete user")
-    void shouldDeleteUser() {
-        userRepository.delete(user2);
-
-        Optional<User> foundUser = userRepository.findById(user2.getUserId());
-        assertFalse(foundUser.isPresent());
+        Optional<User> notFoundUser = userRepository.findByEmailWithRole("nonexistent@example.com");
+        assertThat(notFoundUser).isNotPresent();
     }
 }

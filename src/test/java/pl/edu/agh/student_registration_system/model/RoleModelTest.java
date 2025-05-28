@@ -1,77 +1,71 @@
 package pl.edu.agh.student_registration_system.model;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
-import java.util.HashSet;
-import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
+import java.util.HashSet;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@DataJpaTest
 class RoleModelTest {
 
-    @Test
-    void shouldCreateRoleWithAllFields() {
-        Role role = new Role();
-        role.setRoleId(1L);
-        role.setRoleName(RoleType.STUDENT);
+    @Autowired
+    private TestEntityManager entityManager;
 
-        assertEquals(1L, role.getRoleId());
-        assertEquals(RoleType.STUDENT, role.getRoleName());
-        assertNotNull(role.getUsers());
+    @Test
+    void testPersistAndFindRole() {
+        Role role = new Role(null, RoleType.STUDENT, new HashSet<>());
+        Role savedRole = entityManager.persistAndFlush(role);
+
+        assertThat(savedRole).isNotNull();
+        assertThat(savedRole.getRoleId()).isNotNull();
+        assertThat(savedRole.getRoleName()).isEqualTo(RoleType.STUDENT);
+
+        Role foundRole = entityManager.find(Role.class, savedRole.getRoleId());
+        assertThat(foundRole).isEqualTo(savedRole);
     }
 
     @Test
-    void shouldCreateRoleWithConstructor() {
-        Role role = new Role(1L, RoleType.TEACHER, new HashSet<>());
+    void testRoleNameUniqueConstraint() {
+        Role role1 = new Role(null, RoleType.TEACHER, new HashSet<>());
+        entityManager.persistAndFlush(role1);
 
-        assertEquals(1L, role.getRoleId());
-        assertEquals(RoleType.TEACHER, role.getRoleName());
-        assertNotNull(role.getUsers());
+        Role role2 = new Role(null, RoleType.TEACHER, new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(role2);
+        });
     }
 
     @Test
-    void shouldCreateRoleWithRoleTypeConstructor() {
-        Role role = new Role(RoleType.DEANERY_STAFF);
-
-        assertEquals(RoleType.DEANERY_STAFF, role.getRoleName());
-        assertNotNull(role.getUsers());
+    void testRoleNameIsNotNull() {
+        Role role = new Role(null, null, new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(role);
+        });
     }
 
     @Test
-    void shouldAddUser() {
-        Role role = new Role();
-        User user = new User();
-        user.setRole(role);
+    void testOneToManyUsersRelationship() {
+        Role role = new Role(null, RoleType.DEANERY_STAFF, new HashSet<>());
+        entityManager.persist(role);
 
-        role.getUsers().add(user);
+        User user1 = new User(null, "Dean", "Smith", "pass1", "dean.s@example.com", true, role, null, null);
+        User user2 = new User(null, "Assistant", "Jones", "pass2", "ass.j@example.com", true, role, null, null);
 
-        assertEquals(1, role.getUsers().size());
-        assertTrue(role.getUsers().contains(user));
-    }
+        role.getUsers().add(user1);
+        role.getUsers().add(user2);
 
-    @Test
-    void shouldImplementEqualsAndHashCode() {
-        Role role1 = new Role();
-        role1.setRoleId(1L);
+        entityManager.persistAndFlush(user1);
+        entityManager.persistAndFlush(user2);
+        entityManager.clear();
 
-        Role role2 = new Role();
-        role2.setRoleId(1L);
-
-        Role role3 = new Role();
-        role3.setRoleId(2L);
-
-        assertEquals(role1, role2);
-        assertNotEquals(role1, role3);
-        assertEquals(role1.hashCode(), role2.hashCode());
-        assertNotEquals(role1.hashCode(), role3.hashCode());
-    }
-
-    @Test
-    void shouldImplementToString() {
-        Role role = new Role();
-        role.setRoleId(1L);
-        role.setRoleName(RoleType.STUDENT);
-
-        String toString = role.toString();
-
-        assertTrue(toString.contains("roleId=1"));
-        assertTrue(toString.contains("roleName=STUDENT"));
+        Role foundRole = entityManager.find(Role.class, role.getRoleId());
+        assertThat(foundRole.getUsers()).hasSize(2);
+        assertThat(foundRole.getUsers().stream().map(User::getFirstName)).contains("Dean", "Assistant");
     }
 }

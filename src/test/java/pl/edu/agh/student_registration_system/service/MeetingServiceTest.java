@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import pl.edu.agh.student_registration_system.exceptions.InvalidOperationException;
 import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
 import pl.edu.agh.student_registration_system.model.Course;
 import pl.edu.agh.student_registration_system.model.CourseGroup;
@@ -16,6 +17,9 @@ import pl.edu.agh.student_registration_system.repository.CourseGroupRepository;
 import pl.edu.agh.student_registration_system.repository.MeetingRepository;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,140 +40,179 @@ class MeetingServiceTest {
     @InjectMocks
     private MeetingServiceImpl meetingService;
 
-    private CourseGroup testGroup;
-    private Meeting testMeeting;
-    private DefineMeetingDTO defineMeetingDTO;
-    private LocalDateTime testDateTime;
+    private CourseGroup courseGroup;
+    private Course course;
+    private DefineMeetingDTO defineMeetingDTOWithoutTopicsList;
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
 
     @BeforeEach
     void setUp() {
-        Course testCourse = new Course();
-        testCourse.setCourseId(1L);
-        testCourse.setCourseCode("CS101");
-        testCourse.setCourseName("Introduction to Computer Science");
-
-        testGroup = new CourseGroup();
-        testGroup.setCourseGroupId(1L);
-        testGroup.setGroupNumber(1);
-        testGroup.setMaxCapacity(30);
-        testGroup.setCourse(testCourse);
-
-        testDateTime = LocalDateTime.of(2025, 5, 1, 10, 0);
-
-        testMeeting = new Meeting();
-        testMeeting.setMeetingId(1L);
-        testMeeting.setMeetingNumber(1);
-        testMeeting.setMeetingDate(testDateTime);
-        testMeeting.setTopic("Introduction");
-        testMeeting.setGroup(testGroup);
-
-        defineMeetingDTO = new DefineMeetingDTO();
-        defineMeetingDTO.setNumberOfMeetings(3);
-        defineMeetingDTO.setFirstMeetingDateTime(testDateTime);
-        defineMeetingDTO.setTopic("Weekly Lecture");
+        course = new Course(1L, "Test Course", "TC101", "Desc", 3, null, null);
+        courseGroup = new CourseGroup(1L, 1, 30, course, null, null, null);
+        defineMeetingDTOWithoutTopicsList = new DefineMeetingDTO(2, LocalDateTime.of(2024, 1, 1, 10, 0), null, "Default Topic");
     }
 
     @Test
-    void defineMeetingsForGroup_ShouldReturnListOfMeetingResponses_WhenGroupExists() {
-        when(courseGroupRepository.findById(1L)).thenReturn(Optional.of(testGroup));
-        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(testGroup)).thenReturn(Optional.empty());
+    void defineMeetingsForGroup_Success_DefaultTopicsFromFallbackString() {
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(courseGroup)).thenReturn(Optional.empty());
+        when(meetingRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Meeting> meetings = invocation.getArgument(0);
+            for (int i = 0; i < meetings.size(); i++) {
+                meetings.get(i).setMeetingId((long) (i + 1));
+            }
+            return meetings;
+        });
 
-        List<Meeting> savedMeetings = List.of(
-                createMeeting(1L, 1, testDateTime, "Weekly Lecture", testGroup),
-                createMeeting(2L, 2, testDateTime.plusWeeks(1), "Weekly Lecture", testGroup),
-                createMeeting(3L, 3, testDateTime.plusWeeks(2), "Weekly Lecture", testGroup)
-        );
+        List<MeetingResponse> responses = meetingService.defineMeetingsForGroup(1L, defineMeetingDTOWithoutTopicsList);
 
-        when(meetingRepository.saveAll(anyList())).thenReturn(savedMeetings);
-
-        List<MeetingResponse> result = meetingService.defineMeetingsForGroup(1L, defineMeetingDTO);
-
-        assertNotNull(result);
-        assertEquals(3, result.size());
-        assertEquals(1L, result.get(0).getMeetingId());
-        assertEquals(1, result.get(0).getMeetingNumber());
-        assertEquals(testDateTime.toLocalDate().toString(), result.get(0).getMeetingDate());
-        assertEquals("Weekly Lecture", result.get(0).getTopic());
-        assertEquals(1L, result.get(0).getGroupId());
-
-        verify(courseGroupRepository).findById(1L);
-        verify(meetingRepository).findTopByGroupOrderByMeetingNumberDesc(testGroup);
+        assertNotNull(responses);
+        assertEquals(2, responses.size());
+        assertEquals("Default Topic - Spotkanie 1", responses.get(0).getTopic());
+        assertEquals("Default Topic - Spotkanie 2", responses.get(1).getTopic());
+        assertEquals(defineMeetingDTOWithoutTopicsList.getFirstMeetingDateTime().format(DATE_FORMATTER), responses.get(0).getMeetingDate());
+        assertEquals(defineMeetingDTOWithoutTopicsList.getFirstMeetingDateTime().plusWeeks(1).format(DATE_FORMATTER), responses.get(1).getMeetingDate());
         verify(meetingRepository).saveAll(anyList());
     }
 
     @Test
-    void defineMeetingsForGroup_ShouldContinueNumberingFromLastMeeting_WhenMeetingsExist() {
-        when(courseGroupRepository.findById(1L)).thenReturn(Optional.of(testGroup));
-        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(testGroup)).thenReturn(Optional.of(testMeeting));
+    void defineMeetingsForGroup_Success_DefaultTopicsFromCourseNameWhenFallbackTopicAndListAreNull() {
+        DefineMeetingDTO dtoNoFallbackAndNoList = new DefineMeetingDTO(2, LocalDateTime.of(2024, 1, 1, 10, 0), null, null);
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(courseGroup)).thenReturn(Optional.empty());
+        when(meetingRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Meeting> meetings = invocation.getArgument(0);
+            for (int i = 0; i < meetings.size(); i++) {
+                meetings.get(i).setMeetingId((long) (i + 1));
+            }
+            return meetings;
+        });
 
-        List<Meeting> savedMeetings = List.of(
-                createMeeting(2L, 2, testDateTime, "Weekly Lecture", testGroup),
-                createMeeting(3L, 3, testDateTime.plusWeeks(1), "Weekly Lecture", testGroup),
-                createMeeting(4L, 4, testDateTime.plusWeeks(2), "Weekly Lecture", testGroup)
+        List<MeetingResponse> responses = meetingService.defineMeetingsForGroup(1L, dtoNoFallbackAndNoList);
+
+        assertNotNull(responses);
+        assertEquals(2, responses.size());
+        assertEquals(course.getCourseName() + " - Spotkanie 1", responses.get(0).getTopic());
+        assertEquals(course.getCourseName() + " - Spotkanie 2", responses.get(1).getTopic());
+    }
+
+
+    @Test
+    void defineMeetingsForGroup_Success_ProvidedTopicsList() {
+        DefineMeetingDTO dtoWithTopicsList = new DefineMeetingDTO(
+                2,
+                LocalDateTime.of(2024, 1, 1, 10, 0),
+                Arrays.asList("Topic A", "Topic B"),
+                null
         );
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(courseGroup)).thenReturn(Optional.empty());
+        when(meetingRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Meeting> meetings = invocation.getArgument(0);
+            for (int i = 0; i < meetings.size(); i++) {
+                meetings.get(i).setMeetingId((long) (i + 1));
+            }
+            return meetings;
+        });
 
-        when(meetingRepository.saveAll(anyList())).thenReturn(savedMeetings);
+        List<MeetingResponse> responses = meetingService.defineMeetingsForGroup(1L, dtoWithTopicsList);
 
-        List<MeetingResponse> result = meetingService.defineMeetingsForGroup(1L, defineMeetingDTO);
-
-        assertNotNull(result);
-        assertEquals(3, result.size());
-        assertEquals(2, result.get(0).getMeetingNumber());
-        assertEquals(3, result.get(1).getMeetingNumber());
-        assertEquals(4, result.get(2).getMeetingNumber());
-
-        verify(courseGroupRepository).findById(1L);
-        verify(meetingRepository).findTopByGroupOrderByMeetingNumberDesc(testGroup);
-        verify(meetingRepository).saveAll(anyList());
+        assertNotNull(responses);
+        assertEquals(2, responses.size());
+        assertEquals("Topic A", responses.get(0).getTopic());
+        assertEquals("Topic B", responses.get(1).getTopic());
     }
 
     @Test
-    void defineMeetingsForGroup_ShouldThrowResourceNotFoundException_WhenGroupDoesNotExist() {
-        when(courseGroupRepository.findById(1L)).thenReturn(Optional.empty());
+    void defineMeetingsForGroup_Success_ProvidedTopicsList_SomeBlankUsesDefault() {
+        DefineMeetingDTO dtoWithBlankInTopicsList = new DefineMeetingDTO(
+                2,
+                LocalDateTime.of(2024, 1, 1, 10, 0),
+                Arrays.asList("Topic A", "  "),
+                null
+        );
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(courseGroup)).thenReturn(Optional.empty());
+        when(meetingRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Meeting> meetings = invocation.getArgument(0);
+            for (int i = 0; i < meetings.size(); i++) {
+                meetings.get(i).setMeetingId((long) (i + 1));
+            }
+            return meetings;
+        });
 
-        assertThrows(ResourceNotFoundException.class, () -> meetingService.defineMeetingsForGroup(1L, defineMeetingDTO));
+        List<MeetingResponse> responses = meetingService.defineMeetingsForGroup(1L, dtoWithBlankInTopicsList);
 
-        verify(courseGroupRepository).findById(1L);
-        verify(meetingRepository, never()).findTopByGroupOrderByMeetingNumberDesc(any());
-        verify(meetingRepository, never()).saveAll(anyList());
+        assertNotNull(responses);
+        assertEquals(2, responses.size());
+        assertEquals("Topic A", responses.get(0).getTopic());
+        assertEquals(course.getCourseName() + " - Spotkanie 2", responses.get(1).getTopic());
+    }
+
+
+    @Test
+    void defineMeetingsForGroup_GroupNotFound_ThrowsResourceNotFoundException() {
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> meetingService.defineMeetingsForGroup(1L, defineMeetingDTOWithoutTopicsList));
     }
 
     @Test
-    void getMeetingsByGroupId_ShouldReturnListOfMeetingResponses_WhenGroupExists() {
-        when(courseGroupRepository.findById(1L)).thenReturn(Optional.of(testGroup));
-        when(meetingRepository.findByGroupOrderByMeetingNumber(testGroup)).thenReturn(List.of(testMeeting));
-
-        List<MeetingResponse> result = meetingService.getMeetingsByGroupId(1L);
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getMeetingId());
-        assertEquals(1, result.get(0).getMeetingNumber());
-        assertEquals(testDateTime.toLocalDate().toString(), result.get(0).getMeetingDate());
-        assertEquals("Introduction", result.get(0).getTopic());
-        assertEquals(1L, result.get(0).getGroupId());
-
-        verify(courseGroupRepository).findById(1L);
-        verify(meetingRepository).findByGroupOrderByMeetingNumber(testGroup);
+    void defineMeetingsForGroup_GroupMissingCourse_ThrowsIllegalStateException() {
+        courseGroup.setCourse(null);
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        assertThrows(IllegalStateException.class, () -> meetingService.defineMeetingsForGroup(1L, defineMeetingDTOWithoutTopicsList));
     }
 
     @Test
-    void getMeetingsByGroupId_ShouldThrowResourceNotFoundException_WhenGroupDoesNotExist() {
-        when(courseGroupRepository.findById(1L)).thenReturn(Optional.empty());
+    void defineMeetingsForGroup_MismatchedTopicsAndMeetings_ThrowsInvalidOperationException() {
+        DefineMeetingDTO mismatchedDto = new DefineMeetingDTO(
+                2, LocalDateTime.now(), Collections.singletonList("Only One Topic"), null
+        );
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        assertThrows(InvalidOperationException.class, () -> meetingService.defineMeetingsForGroup(1L, mismatchedDto));
+    }
 
+    @Test
+    void defineMeetingsForGroup_ContinuesNumberingFromExistingMeetings() {
+        Meeting existingMeeting = new Meeting();
+        existingMeeting.setMeetingNumber(5);
+        when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
+        when(meetingRepository.findTopByGroupOrderByMeetingNumberDesc(courseGroup)).thenReturn(Optional.of(existingMeeting));
+        when(meetingRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Meeting> meetings = invocation.getArgument(0);
+            for (int i = 0; i < meetings.size(); i++) {
+                meetings.get(i).setMeetingId((long) (i + 1));
+            }
+            return meetings;
+        });
+
+
+        List<MeetingResponse> responses = meetingService.defineMeetingsForGroup(1L, defineMeetingDTOWithoutTopicsList);
+
+        assertEquals(2, responses.size());
+        assertEquals(6, responses.get(0).getMeetingNumber());
+        assertEquals(7, responses.get(1).getMeetingNumber());
+    }
+
+
+    @Test
+    void getMeetingsByGroupId_Success() {
+        Meeting meeting1 = new Meeting(1L, 1, LocalDateTime.now(), "Topic 1", courseGroup, null);
+        Meeting meeting2 = new Meeting(2L, 2, LocalDateTime.now().plusWeeks(1), "Topic 2", courseGroup, null);
+        when(courseGroupRepository.existsById(1L)).thenReturn(true);
+        when(courseGroupRepository.getReferenceById(1L)).thenReturn(courseGroup);
+        when(meetingRepository.findByGroupOrderByMeetingNumber(courseGroup)).thenReturn(Arrays.asList(meeting1, meeting2));
+
+        List<MeetingResponse> responses = meetingService.getMeetingsByGroupId(1L);
+
+        assertNotNull(responses);
+        assertEquals(2, responses.size());
+    }
+
+    @Test
+    void getMeetingsByGroupId_GroupNotFound_ThrowsResourceNotFoundException() {
+        when(courseGroupRepository.existsById(1L)).thenReturn(false);
         assertThrows(ResourceNotFoundException.class, () -> meetingService.getMeetingsByGroupId(1L));
-
-        verify(courseGroupRepository).findById(1L);
-        verify(meetingRepository, never()).findByGroupOrderByMeetingNumber(any());
-    }
-
-    private Meeting createMeeting(Long id, Integer number, LocalDateTime date, String topic, CourseGroup group) {
-        Meeting meeting = new Meeting();
-        meeting.setMeetingId(id);
-        meeting.setMeetingNumber(number);
-        meeting.setMeetingDate(date);
-        meeting.setTopic(topic);
-        meeting.setGroup(group);
-        return meeting;
     }
 }

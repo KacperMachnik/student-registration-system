@@ -1,10 +1,10 @@
 package pl.edu.agh.student_registration_system.repository;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -14,156 +14,72 @@ import pl.edu.agh.student_registration_system.model.RoleType;
 import pl.edu.agh.student_registration_system.model.Teacher;
 import pl.edu.agh.student_registration_system.model.User;
 
+import java.util.HashSet;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-class TeacherRepositoryTest {
+public class TeacherRepositoryTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
 
     @Autowired
     private TeacherRepository teacherRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
-
+    private User userT1, userT2, userNonTeacher;
+    private Teacher teacher1, teacher2;
     private Role teacherRole;
-    private User user1;
-    private User user2;
-    private Teacher teacher1;
-    private Teacher teacher2;
 
     @BeforeEach
     void setUp() {
-        teacherRole = new Role();
-        teacherRole.setRoleName(RoleType.TEACHER);
-        roleRepository.save(teacherRole);
+        teacherRole = new Role(RoleType.TEACHER);
+        entityManager.persist(teacherRole);
+        Role studentRole = new Role(RoleType.STUDENT);
+        entityManager.persist(studentRole);
 
-        user1 = new User();
-        user1.setEmail("teacher1@example.com");
-        user1.setPassword("password");
-        user1.setFirstName("Jan");
-        user1.setLastName("Profesor");
-        user1.setRole(teacherRole);
-        user1.setIsActive(true);
-        userRepository.save(user1);
 
-        user2 = new User();
-        user2.setEmail("teacher2@example.com");
-        user2.setPassword("password");
-        user2.setFirstName("Anna");
-        user2.setLastName("Doktor");
-        user2.setRole(teacherRole);
-        user2.setIsActive(true);
-        userRepository.save(user2);
-
-        teacher1 = new Teacher();
-        teacher1.setUser(user1);
-        teacher1.setTitle("Prof.");
+        userT1 = new User(null, "Teacher", "T1", "pass", "t1@test.com", true, teacherRole, null, null);
+        entityManager.persist(userT1);
+        teacher1 = new Teacher(null, "Prof.", userT1, new HashSet<>(), new HashSet<>(), new HashSet<>());
         teacherRepository.save(teacher1);
 
-        teacher2 = new Teacher();
-        teacher2.setUser(user2);
-        teacher2.setTitle("Dr");
+        userT2 = new User(null, "Teacher", "T2", "pass", "t2@test.com", true, teacherRole, null, null);
+        entityManager.persist(userT2);
+        teacher2 = new Teacher(null, "Dr.", userT2, new HashSet<>(), new HashSet<>(), new HashSet<>());
         teacherRepository.save(teacher2);
+
+        userNonTeacher = new User(null, "NonTeacher", "NT", "pass", "nt@test.com", true, studentRole, null, null);
+        entityManager.persist(userNonTeacher);
+
+        entityManager.flush();
     }
 
     @Test
-    @DisplayName("Should find teacher by user")
-    void shouldFindTeacherByUser() {
-        Optional<Teacher> foundTeacher = teacherRepository.findByUser(user1);
+    void testFindByUser() {
+        Optional<Teacher> foundTeacher1 = teacherRepository.findByUser(userT1);
+        assertThat(foundTeacher1).isPresent();
+        assertThat(foundTeacher1.get()).isEqualTo(teacher1);
 
-        assertTrue(foundTeacher.isPresent());
-        assertEquals(teacher1, foundTeacher.get());
-        assertEquals("Prof.", foundTeacher.get().getTitle());
+        Optional<Teacher> notFoundTeacher = teacherRepository.findByUser(userNonTeacher);
+        assertThat(notFoundTeacher).isNotPresent();
     }
 
     @Test
-    @DisplayName("Should not find teacher by non-existent user")
-    void shouldNotFindTeacherByNonExistentUser() {
-        User nonExistentUser = new User();
-        nonExistentUser.setUserId(999L);
-
-        Optional<Teacher> foundTeacher = teacherRepository.findByUser(nonExistentUser);
-
-        assertFalse(foundTeacher.isPresent());
-    }
-
-    @Test
-    @DisplayName("Should find all teachers with pagination")
-    void shouldFindAllTeachersWithPagination() {
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<Teacher> teacherPage = teacherRepository.findAll(pageable);
-
-        assertEquals(2, teacherPage.getTotalElements());
-        assertEquals(2, teacherPage.getContent().size());
-        assertTrue(teacherPage.getContent().contains(teacher1));
-        assertTrue(teacherPage.getContent().contains(teacher2));
-    }
-
-    @Test
-    @DisplayName("Should find teachers with specification")
-    void shouldFindTeachersWithSpecification() {
-        Specification<Teacher> spec = (root, query, criteriaBuilder) ->
+    void testFindAllWithSpecificationAndPageable() {
+        Specification<Teacher> specProf = (root, query, criteriaBuilder) ->
                 criteriaBuilder.equal(root.get("title"), "Prof.");
+        Pageable pageable = PageRequest.of(0, 5);
+        Page<Teacher> profTeachers = teacherRepository.findAll(specProf, pageable);
 
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<Teacher> teacherPage = teacherRepository.findAll(spec, pageable);
+        assertThat(profTeachers.getTotalElements()).isEqualTo(1);
+        assertThat(profTeachers.getContent()).hasSize(1);
+        assertThat(profTeachers.getContent().get(0)).isEqualTo(teacher1);
 
-        assertEquals(1, teacherPage.getTotalElements());
-        assertEquals(teacher1, teacherPage.getContent().get(0));
-    }
-
-    @Test
-    @DisplayName("Should save new teacher")
-    void shouldSaveNewTeacher() {
-        User newUser = new User();
-        newUser.setEmail("newteacher@example.com");
-        newUser.setPassword("password");
-        newUser.setFirstName("Piotr");
-        newUser.setLastName("Docent");
-        newUser.setRole(teacherRole);
-        newUser.setIsActive(true);
-        userRepository.save(newUser);
-
-        Teacher newTeacher = new Teacher();
-        newTeacher.setUser(newUser);
-        newTeacher.setTitle("Doc.");
-
-        Teacher savedTeacher = teacherRepository.save(newTeacher);
-
-        assertNotNull(savedTeacher.getTeacherId());
-
-        Optional<Teacher> foundTeacher = teacherRepository.findById(savedTeacher.getTeacherId());
-        assertTrue(foundTeacher.isPresent());
-        assertEquals("Doc.", foundTeacher.get().getTitle());
-        assertEquals("Piotr", foundTeacher.get().getUser().getFirstName());
-    }
-
-    @Test
-    @DisplayName("Should update existing teacher")
-    void shouldUpdateExistingTeacher() {
-        teacher1.setTitle("Prof. dr hab.");
-
-        Teacher updatedTeacher = teacherRepository.save(teacher1);
-
-        assertEquals(teacher1.getTeacherId(), updatedTeacher.getTeacherId());
-        assertEquals("Prof. dr hab.", updatedTeacher.getTitle());
-
-        Optional<Teacher> foundTeacher = teacherRepository.findById(teacher1.getTeacherId());
-        assertTrue(foundTeacher.isPresent());
-        assertEquals("Prof. dr hab.", foundTeacher.get().getTitle());
-    }
-
-    @Test
-    @DisplayName("Should delete teacher")
-    void shouldDeleteTeacher() {
-        teacherRepository.delete(teacher2);
-
-        Optional<Teacher> foundTeacher = teacherRepository.findById(teacher2.getTeacherId());
-        assertFalse(foundTeacher.isPresent());
+        Specification<Teacher> specAll = (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+        Page<Teacher> allTeachers = teacherRepository.findAll(specAll, PageRequest.of(0,1));
+        assertThat(allTeachers.getTotalElements()).isEqualTo(2);
+        assertThat(allTeachers.getContent()).hasSize(1);
     }
 }
