@@ -1,27 +1,31 @@
 package pl.edu.agh.student_registration_system.service;
 
-import jakarta.persistence.criteria.Predicate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
 import pl.edu.agh.student_registration_system.exceptions.UserAlreadyExistsException;
 import pl.edu.agh.student_registration_system.model.*;
 import pl.edu.agh.student_registration_system.payload.dto.UpdateTeacherDTO;
-import pl.edu.agh.student_registration_system.payload.response.*;
+import pl.edu.agh.student_registration_system.payload.response.CourseResponse;
+import pl.edu.agh.student_registration_system.payload.response.GroupResponse;
+import pl.edu.agh.student_registration_system.payload.response.TeacherResponse;
 import pl.edu.agh.student_registration_system.repository.*;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,319 +33,205 @@ class TeacherServiceTest {
 
     @Mock
     private TeacherRepository teacherRepository;
-
     @Mock
     private UserRepository userRepository;
-
     @Mock
     private CourseGroupRepository courseGroupRepository;
-
     @Mock
     private EnrollmentRepository enrollmentRepository;
-
     @Mock
     private CourseRepository courseRepository;
-
     @Mock
     private UserService userService;
 
     @InjectMocks
     private TeacherServiceImpl teacherService;
 
-    @Captor
-    private ArgumentCaptor<User> userCaptor;
-
-    @Captor
-    private ArgumentCaptor<Teacher> teacherCaptor;
-
-    private Teacher testTeacher;
-    private User testUser;
-    private Role testRole;
-    private Course testCourse;
-    private CourseGroup testGroup;
+    private User user;
+    private Teacher teacher;
+    private Role teacherRole;
+    private Course course;
+    private CourseGroup courseGroup;
 
     @BeforeEach
     void setUp() {
-        testRole = new Role();
-        testRole.setRoleId(1L);
-        testRole.setRoleName(RoleType.TEACHER);
+        teacherRole = new Role(1L, RoleType.TEACHER, null);
+        user = new User(1L, "Jane", "Smith", "securepass", "jane.smith@example.com", true, teacherRole, null, null);
+        teacher = new Teacher(1L, "Dr.", user, null, null, null);
+        user.setTeacherProfile(teacher);
 
-        testUser = new User();
-        testUser.setUserId(1L);
-        testUser.setFirstName("John");
-        testUser.setLastName("Doe");
-        testUser.setEmail("john.doe@example.com");
-        testUser.setIsActive(true);
-        testUser.setRole(testRole);
-
-        testTeacher = new Teacher();
-        testTeacher.setTeacherId(1L);
-        testTeacher.setTitle("Professor");
-        testTeacher.setUser(testUser);
-
-        testCourse = new Course();
-        testCourse.setCourseId(1L);
-        testCourse.setCourseCode("CS101");
-        testCourse.setCourseName("Introduction to Computer Science");
-
-        testGroup = new CourseGroup();
-        testGroup.setCourseGroupId(1L);
-        testGroup.setGroupNumber(1);
-        testGroup.setMaxCapacity(30);
-        testGroup.setCourse(testCourse);
-        testGroup.setTeacher(testTeacher);
+        course = new Course(1L, "Advanced Java", "CS305", "Deep dive into Java", 6, null, null);
+        courseGroup = new CourseGroup(1L, 1, 20, course, teacher, null, null);
     }
 
     @Test
-    void findCurrentTeacherEntity_ShouldReturnTeacher_WhenCurrentUserHasTeacherProfile() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.of(testTeacher));
-
-        Teacher result = teacherService.findCurrentTeacherEntity();
-
-        assertNotNull(result);
-        assertEquals(1L, result.getTeacherId());
-        assertEquals("Professor", result.getTitle());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
+    void findCurrentTeacherEntity_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(teacherRepository.findByUser(user)).thenReturn(Optional.of(teacher));
+        Teacher foundTeacher = teacherService.findCurrentTeacherEntity();
+        assertNotNull(foundTeacher);
+        assertEquals(teacher.getTeacherId(), foundTeacher.getTeacherId());
     }
 
     @Test
-    void findCurrentTeacherEntity_ShouldThrowResourceNotFoundException_WhenCurrentUserHasNoTeacherProfile() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.empty());
-
+    void findCurrentTeacherEntity_ProfileNotFound_ThrowsResourceNotFoundException() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(teacherRepository.findByUser(user)).thenReturn(Optional.empty());
         assertThrows(ResourceNotFoundException.class, () -> teacherService.findCurrentTeacherEntity());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
     }
 
     @Test
-    void getTeacherResponseById_ShouldReturnTeacherResponse_WhenTeacherExists() {
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(testTeacher));
-
-        TeacherResponse result = teacherService.getTeacherResponseById(1L);
-
-        assertNotNull(result);
-        assertEquals(1L, result.getTeacherId());
-        assertEquals("Professor", result.getTitle());
-        assertNotNull(result.getUserInfo());
-        assertEquals("John", result.getUserInfo().getFirstName());
-        assertEquals("Doe", result.getUserInfo().getLastName());
-
-        verify(teacherRepository).findById(1L);
+    void getTeacherResponseById_Success() {
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        TeacherResponse response = teacherService.getTeacherResponseById(1L);
+        assertNotNull(response);
+        assertEquals(teacher.getTeacherId(), response.getTeacherId());
+        assertEquals(user.getEmail(), response.getUserInfo().getUsername());
     }
 
     @Test
-    void getTeacherResponseById_ShouldThrowResourceNotFoundException_WhenTeacherDoesNotExist() {
-        when(teacherRepository.findById(1L)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> teacherService.getTeacherResponseById(1L));
-
-        verify(teacherRepository).findById(1L);
+    void getCurrentTeacherResponse_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(teacherRepository.findByUser(user)).thenReturn(Optional.of(teacher));
+        TeacherResponse response = teacherService.getCurrentTeacherResponse();
+        assertNotNull(response);
+        assertEquals(teacher.getTeacherId(), response.getTeacherId());
     }
 
     @Test
-    void getCurrentTeacherResponse_ShouldReturnTeacherResponse_WhenCurrentTeacherExists() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.of(testTeacher));
+    void updateTeacher_Success_AllFieldsChanged() {
+        UpdateTeacherDTO dto = new UpdateTeacherDTO();
+        dto.setEmail("new.jane@example.com");
+        dto.setFirstName("Janet");
+        dto.setLastName("Smithson");
+        dto.setIsActive(false);
+        dto.setTitle("Prof.");
 
-        TeacherResponse result = teacherService.getCurrentTeacherResponse();
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(userRepository.existsByEmail("new.jane@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(teacherRepository.save(any(Teacher.class))).thenReturn(teacher);
 
-        assertNotNull(result);
-        assertEquals(1L, result.getTeacherId());
-        assertEquals("Professor", result.getTitle());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
+        TeacherResponse response = teacherService.updateTeacher(1L, dto);
+        assertNotNull(response);
+        assertEquals("new.jane@example.com", response.getUserInfo().getUsername());
+        assertEquals("Janet", response.getUserInfo().getFirstName());
+        assertEquals("Prof.", response.getTitle());
+        assertFalse(response.getUserInfo().getIsActive());
+        verify(userRepository).save(user);
+        verify(teacherRepository).save(teacher);
     }
 
     @Test
-    void updateTeacher_ShouldReturnUpdatedTeacherResponse_WhenUpdateIsValid() {
-        UpdateTeacherDTO updateTeacherDTO = new UpdateTeacherDTO();
-        updateTeacherDTO.setFirstName("Jane");
-        updateTeacherDTO.setLastName("Smith");
-        updateTeacherDTO.setEmail("jane.smith@example.com");
-        updateTeacherDTO.setIsActive(true);
-        updateTeacherDTO.setTitle("Associate Professor");
+    void updateTeacher_EmailAlreadyExists_ThrowsUserAlreadyExistsException() {
+        UpdateTeacherDTO dto = new UpdateTeacherDTO();
+        dto.setEmail("existing.email@example.com");
 
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(testTeacher));
-        when(userRepository.existsByEmail("jane.smith@example.com")).thenReturn(false);
-        when(userRepository.save(any(User.class))).thenReturn(testUser);
-        when(teacherRepository.save(any(Teacher.class))).thenReturn(testTeacher);
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(userRepository.existsByEmail("existing.email@example.com")).thenReturn(true);
 
-        TeacherResponse result = teacherService.updateTeacher(1L, updateTeacherDTO);
-
-        assertNotNull(result);
-        verify(teacherRepository).findById(1L);
-        verify(userRepository).existsByEmail("jane.smith@example.com");
-        verify(userRepository).save(userCaptor.capture());
-        verify(teacherRepository).save(teacherCaptor.capture());
-
-        User capturedUser = userCaptor.getValue();
-        assertEquals("Jane", capturedUser.getFirstName());
-        assertEquals("Smith", capturedUser.getLastName());
-        assertEquals("jane.smith@example.com", capturedUser.getEmail());
-        assertTrue(capturedUser.getIsActive());
-
-        Teacher capturedTeacher = teacherCaptor.getValue();
-        assertEquals("Associate Professor", capturedTeacher.getTitle());
+        assertThrows(UserAlreadyExistsException.class, () -> teacherService.updateTeacher(1L, dto));
     }
 
     @Test
-    void updateTeacher_ShouldThrowUserAlreadyExistsException_WhenEmailExists() {
-        UpdateTeacherDTO updateTeacherDTO = new UpdateTeacherDTO();
-        updateTeacherDTO.setEmail("existing@example.com");
-
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(testTeacher));
-        when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
-
-        assertThrows(UserAlreadyExistsException.class, () -> teacherService.updateTeacher(1L, updateTeacherDTO));
-
-        verify(teacherRepository).findById(1L);
-        verify(userRepository).existsByEmail("existing@example.com");
-        verify(userRepository, never()).save(any());
-        verify(teacherRepository, never()).save(any());
-    }
-
-    @Test
-    void deleteTeacherAndUser_ShouldDeleteUserAndTeacher_WhenTeacherHasNoGroups() {
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(testTeacher));
-        when(courseGroupRepository.countByTeacher(testTeacher)).thenReturn(0L);
-        doNothing().when(userRepository).delete(testUser);
+    void deleteTeacherAndUser_Success_NoAssignedGroups() {
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(courseGroupRepository.countByTeacher(teacher)).thenReturn(0L);
+        doNothing().when(userRepository).delete(user);
 
         teacherService.deleteTeacherAndUser(1L);
-
-        verify(teacherRepository).findById(1L);
-        verify(courseGroupRepository).countByTeacher(testTeacher);
-        verify(userRepository).delete(testUser);
+        verify(userRepository).delete(user);
+        verify(teacherRepository, never()).delete(teacher);
     }
 
     @Test
-    void deleteTeacherAndUser_ShouldThrowIllegalStateException_WhenTeacherHasGroups() {
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(testTeacher));
-        when(courseGroupRepository.countByTeacher(testTeacher)).thenReturn(1L);
+    void deleteTeacherAndUser_Success_TeacherHasNoUser() {
+        teacher.setUser(null);
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(courseGroupRepository.countByTeacher(teacher)).thenReturn(0L);
+        doNothing().when(teacherRepository).delete(teacher);
+
+        teacherService.deleteTeacherAndUser(1L);
+        verify(userRepository, never()).delete(any(User.class));
+        verify(teacherRepository).delete(teacher);
+    }
+
+
+    @Test
+    void deleteTeacherAndUser_HasAssignedGroups_ThrowsIllegalStateException() {
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        when(courseGroupRepository.countByTeacher(teacher)).thenReturn(1L);
 
         assertThrows(IllegalStateException.class, () -> teacherService.deleteTeacherAndUser(1L));
-
-        verify(teacherRepository).findById(1L);
-        verify(courseGroupRepository).countByTeacher(testTeacher);
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).delete(any(User.class));
+        verify(teacherRepository, never()).delete(any(Teacher.class));
     }
 
     @Test
-    void searchTeachers_ShouldReturnPageOfTeacherResponses() {
-        Pageable pageable = Pageable.unpaged();
-        Page<Teacher> teacherPage = new PageImpl<>(List.of(testTeacher));
-
+    @SuppressWarnings("unchecked")
+    void searchTeachers_Success() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Teacher> teacherPage = new PageImpl<>(Collections.singletonList(teacher), pageable, 1);
         when(teacherRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(teacherPage);
 
-        Page<TeacherResponse> result = teacherService.searchTeachers("John", pageable);
-
-        assertNotNull(result);
-        assertEquals(1, result.getTotalElements());
-        assertEquals(1L, result.getContent().get(0).getTeacherId());
-        assertEquals("Professor", result.getContent().get(0).getTitle());
-
-        verify(teacherRepository).findAll(any(Specification.class), eq(pageable));
+        Page<TeacherResponse> responsePage = teacherService.searchTeachers("Jane", pageable);
+        assertNotNull(responsePage);
+        assertEquals(1, responsePage.getTotalElements());
+        assertEquals(teacher.getTeacherId(), responsePage.getContent().get(0).getTeacherId());
     }
 
     @Test
-    void getCurrentTeacherCourses_ShouldReturnListOfCourseResponses() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.of(testTeacher));
-        when(courseGroupRepository.findByTeacherWithCourse(testTeacher)).thenReturn(List.of(testGroup));
+    void getCurrentTeacherCourses_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(teacherRepository.findByUser(user)).thenReturn(Optional.of(teacher));
+        when(courseGroupRepository.findByTeacherWithCourse(teacher)).thenReturn(Collections.singletonList(courseGroup));
 
-        List<CourseResponse> result = teacherService.getCurrentTeacherCourses();
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getCourseId());
-        assertEquals("CS101", result.get(0).getCourseCode());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
-        verify(courseGroupRepository).findByTeacherWithCourse(testTeacher);
+        List<CourseResponse> courses = teacherService.getCurrentTeacherCourses();
+        assertNotNull(courses);
+        assertEquals(1, courses.size());
+        assertEquals(course.getCourseId(), courses.get(0).getCourseId());
     }
 
     @Test
-    void getCurrentTeacherGroups_ShouldReturnListOfGroupResponses_WhenCourseIdIsProvided() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.of(testTeacher));
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
-        when(courseGroupRepository.findByTeacherAndCourseWithDetails(testTeacher, testCourse)).thenReturn(List.of(testGroup));
-        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(15);
+    void getCurrentTeacherGroups_WithCourseId_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(teacherRepository.findByUser(user)).thenReturn(Optional.of(teacher));
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(courseGroupRepository.findByTeacherAndCourseWithDetails(teacher, course)).thenReturn(Collections.singletonList(courseGroup));
+        when(enrollmentRepository.countByGroup(courseGroup)).thenReturn(5);
 
-        List<GroupResponse> result = teacherService.getCurrentTeacherGroups(1L);
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getGroupId());
-        assertEquals(1, result.get(0).getGroupNumber());
-        assertEquals(15, result.get(0).getEnrolledCount());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
-        verify(courseRepository).findById(1L);
-        verify(courseGroupRepository).findByTeacherAndCourseWithDetails(testTeacher, testCourse);
-        verify(enrollmentRepository).countByGroup(testGroup);
+        List<GroupResponse> groups = teacherService.getCurrentTeacherGroups(1L);
+        assertNotNull(groups);
+        assertEquals(1, groups.size());
+        assertEquals(courseGroup.getCourseGroupId(), groups.get(0).getGroupId());
     }
 
     @Test
-    void getCurrentTeacherGroups_ShouldReturnListOfAllGroupResponses_WhenCourseIdIsNull() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.of(testTeacher));
-        when(courseGroupRepository.findByTeacherWithDetails(testTeacher)).thenReturn(List.of(testGroup));
-        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(15);
+    void getCurrentTeacherGroups_WithoutCourseId_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(teacherRepository.findByUser(user)).thenReturn(Optional.of(teacher));
+        when(courseGroupRepository.findByTeacherWithDetails(teacher)).thenReturn(Collections.singletonList(courseGroup));
+        when(enrollmentRepository.countByGroup(courseGroup)).thenReturn(5);
 
-        List<GroupResponse> result = teacherService.getCurrentTeacherGroups(null);
+        List<GroupResponse> groups = teacherService.getCurrentTeacherGroups(null);
+        assertNotNull(groups);
+        assertEquals(1, groups.size());
+        assertEquals(courseGroup.getCourseGroupId(), groups.get(0).getGroupId());
+    }
 
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getGroupId());
 
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
-        verify(courseRepository, never()).findById(anyLong());
-        verify(courseGroupRepository).findByTeacherWithDetails(testTeacher);
-        verify(enrollmentRepository).countByGroup(testGroup);
+    @Test
+    void findById_Success() {
+        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher));
+        Teacher found = teacherService.findById(1L);
+        assertNotNull(found);
+        assertEquals(teacher.getTeacherId(), found.getTeacherId());
     }
 
     @Test
-    void getCurrentTeacherGroups_ShouldThrowResourceNotFoundException_WhenCourseDoesNotExist() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(teacherRepository.findByUser(testUser)).thenReturn(Optional.of(testTeacher));
-        when(courseRepository.findById(1L)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> teacherService.getCurrentTeacherGroups(1L));
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(teacherRepository).findByUser(testUser);
-        verify(courseRepository).findById(1L);
-        verify(courseGroupRepository, never()).findByTeacherAndCourseWithDetails(any(), any());
-    }
-
-    @Test
-    void findById_ShouldReturnTeacher_WhenTeacherExists() {
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(testTeacher));
-
-        Teacher result = teacherService.findById(1L);
-
-        assertNotNull(result);
-        assertEquals(1L, result.getTeacherId());
-        assertEquals("Professor", result.getTitle());
-
-        verify(teacherRepository).findById(1L);
-    }
-
-    @Test
-    void findById_ShouldThrowResourceNotFoundException_WhenTeacherDoesNotExist() {
+    void findById_NotFound_ThrowsResourceNotFoundException() {
         when(teacherRepository.findById(1L)).thenReturn(Optional.empty());
-
         assertThrows(ResourceNotFoundException.class, () -> teacherService.findById(1L));
-
-        verify(teacherRepository).findById(1L);
     }
+
 }

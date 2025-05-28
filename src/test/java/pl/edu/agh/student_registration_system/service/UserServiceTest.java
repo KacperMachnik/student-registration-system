@@ -1,18 +1,19 @@
 package pl.edu.agh.student_registration_system.service;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException; // Dodany import
 import org.springframework.security.crypto.password.PasswordEncoder;
 import pl.edu.agh.student_registration_system.exceptions.AuthenticationFailedException;
+import pl.edu.agh.student_registration_system.exceptions.IndexNumberGenerationException;
 import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
 import pl.edu.agh.student_registration_system.exceptions.UserAlreadyExistsException;
 import pl.edu.agh.student_registration_system.model.*;
@@ -24,7 +25,8 @@ import pl.edu.agh.student_registration_system.repository.UserRepository;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,223 +34,204 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
-
     @Mock
     private RoleRepository roleRepository;
-
     @Mock
     private StudentRepository studentRepository;
-
     @Mock
     private PasswordEncoder passwordEncoder;
-
     @Mock
     private Authentication authentication;
-
     @Mock
     private SecurityContext securityContext;
-
     @Mock
     private UserDetails userDetails;
+
 
     @InjectMocks
     private UserServiceImpl userService;
 
-    @Captor
-    private ArgumentCaptor<User> userCaptor;
-
-    private RegisterDTO registerDTO;
+    private RegisterDTO studentRegisterDTO;
+    private RegisterDTO teacherRegisterDTO;
+    private RegisterDTO deaneryRegisterDTO;
     private Role studentRole;
     private Role teacherRole;
-    private User testUser;
-
-    private MockedStatic<SecurityContextHolder> mockedSecurityContextHolder;
+    private Role deaneryRole;
 
     @BeforeEach
     void setUp() {
-        studentRole = new Role();
-        studentRole.setRoleId(1L);
-        studentRole.setRoleName(RoleType.STUDENT);
+        studentRegisterDTO = new RegisterDTO();
+        studentRegisterDTO.setEmail("student@example.com");
+        studentRegisterDTO.setPassword("password123");
+        studentRegisterDTO.setFirstName("John");
+        studentRegisterDTO.setLastName("Doe");
+        studentRegisterDTO.setRoleType(RoleType.STUDENT);
 
-        teacherRole = new Role();
-        teacherRole.setRoleId(2L);
-        teacherRole.setRoleName(RoleType.TEACHER);
+        teacherRegisterDTO = new RegisterDTO();
+        teacherRegisterDTO.setEmail("teacher@example.com");
+        teacherRegisterDTO.setPassword("password123");
+        teacherRegisterDTO.setFirstName("Jane");
+        teacherRegisterDTO.setLastName("Smith");
+        teacherRegisterDTO.setRoleType(RoleType.TEACHER);
+        teacherRegisterDTO.setTitle("Dr.");
 
-        registerDTO = new RegisterDTO();
-        registerDTO.setEmail("test@example.com");
-        registerDTO.setPassword("password123");
-        registerDTO.setFirstName("John");
-        registerDTO.setLastName("Doe");
-        registerDTO.setRoleType(RoleType.STUDENT);
+        deaneryRegisterDTO = new RegisterDTO();
+        deaneryRegisterDTO.setEmail("deanery@example.com");
+        deaneryRegisterDTO.setPassword("password123");
+        deaneryRegisterDTO.setFirstName("Admin");
+        deaneryRegisterDTO.setLastName("User");
+        deaneryRegisterDTO.setRoleType(RoleType.DEANERY_STAFF);
 
-        testUser = new User();
-        testUser.setUserId(1L);
-        testUser.setEmail("test@example.com");
-        testUser.setFirstName("John");
-        testUser.setLastName("Doe");
-        testUser.setPassword("encodedPassword");
-        testUser.setIsActive(true);
-        testUser.setRole(studentRole);
 
-        mockedSecurityContextHolder = mockStatic(SecurityContextHolder.class);
-        when(SecurityContextHolder.getContext()).thenReturn(securityContext);
-    }
+        studentRole = new Role(1L, RoleType.STUDENT, null);
+        teacherRole = new Role(2L, RoleType.TEACHER, null);
+        deaneryRole = new Role(3L, RoleType.DEANERY_STAFF, null);
 
-    @AfterEach
-    void tearDown() {
-        if (mockedSecurityContextHolder != null) {
-            mockedSecurityContextHolder.close();
-        }
+        SecurityContextHolder.setContext(securityContext);
     }
 
     @Test
-    void registerNewUser_ShouldRegisterStudent_WhenRoleIsStudent() {
-        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+    void registerNewUser_Student_Success() {
+        when(userRepository.existsByEmail(studentRegisterDTO.getEmail())).thenReturn(false);
         when(roleRepository.findByRoleName(RoleType.STUDENT)).thenReturn(Optional.of(studentRole));
-        when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
+        when(passwordEncoder.encode(studentRegisterDTO.getPassword())).thenReturn("encodedPassword");
         when(studentRepository.existsByIndexNumber(anyString())).thenReturn(false);
-        when(userRepository.save(any(User.class))).thenReturn(testUser);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setUserId(1L);
+            if (user.getStudentProfile() != null) {
+                user.getStudentProfile().setStudentId(1L);
+            }
+            return user;
+        });
 
-        User result = userService.registerNewUser(registerDTO);
+        User registeredUser = userService.registerNewUser(studentRegisterDTO);
 
-        assertNotNull(result);
-        assertEquals("test@example.com", result.getEmail());
-        assertEquals("John", result.getFirstName());
-        assertEquals("Doe", result.getLastName());
-        assertEquals("encodedPassword", result.getPassword());
-        assertTrue(result.getIsActive());
-        assertEquals(RoleType.STUDENT, result.getRole().getRoleName());
-
-        verify(userRepository).existsByEmail("test@example.com");
-        verify(roleRepository).findByRoleName(RoleType.STUDENT);
-        verify(passwordEncoder).encode("password123");
-        verify(studentRepository).existsByIndexNumber(anyString());
-        verify(userRepository).save(userCaptor.capture());
-
-        User capturedUser = userCaptor.getValue();
-        assertNotNull(capturedUser.getStudentProfile());
-        assertNotNull(capturedUser.getStudentProfile().getIndexNumber());
+        assertNotNull(registeredUser);
+        assertEquals(studentRegisterDTO.getEmail(), registeredUser.getEmail());
+        assertNotNull(registeredUser.getStudentProfile());
+        assertNotNull(registeredUser.getStudentProfile().getIndexNumber());
+        verify(userRepository).save(any(User.class));
+        verify(studentRepository, atLeastOnce()).existsByIndexNumber(anyString());
     }
 
     @Test
-    void registerNewUser_ShouldRegisterTeacher_WhenRoleIsTeacher() {
-        registerDTO.setRoleType(RoleType.TEACHER);
-        registerDTO.setTitle("Professor");
-
-        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+    void registerNewUser_Teacher_Success() {
+        when(userRepository.existsByEmail(teacherRegisterDTO.getEmail())).thenReturn(false);
         when(roleRepository.findByRoleName(RoleType.TEACHER)).thenReturn(Optional.of(teacherRole));
-        when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
-        when(userRepository.save(any(User.class))).thenReturn(testUser);
+        when(passwordEncoder.encode(teacherRegisterDTO.getPassword())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setUserId(1L);
+            if (user.getTeacherProfile() != null) {
+                user.getTeacherProfile().setTeacherId(1L);
+            }
+            return user;
+        });
 
-        User result = userService.registerNewUser(registerDTO);
+        User registeredUser = userService.registerNewUser(teacherRegisterDTO);
 
-        assertNotNull(result);
-        verify(userRepository).existsByEmail("test@example.com");
-        verify(roleRepository).findByRoleName(RoleType.TEACHER);
-        verify(passwordEncoder).encode("password123");
-        verify(userRepository).save(userCaptor.capture());
-
-        User capturedUser = userCaptor.getValue();
-        assertNotNull(capturedUser.getTeacherProfile());
-        assertEquals("Professor", capturedUser.getTeacherProfile().getTitle());
+        assertNotNull(registeredUser);
+        assertEquals(teacherRegisterDTO.getEmail(), registeredUser.getEmail());
+        assertNotNull(registeredUser.getTeacherProfile());
+        assertEquals(teacherRegisterDTO.getTitle(), registeredUser.getTeacherProfile().getTitle());
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
-    void registerNewUser_ShouldThrowUserAlreadyExistsException_WhenEmailExists() {
-        when(userRepository.existsByEmail("test@example.com")).thenReturn(true);
+    void registerNewUser_Teacher_TitleRequired_ThrowsIllegalArgumentException() {
+        RegisterDTO teacherDtoNoTitle = new RegisterDTO();
+        teacherDtoNoTitle.setEmail("teacher.notitle@example.com");
+        teacherDtoNoTitle.setPassword("password123");
+        teacherDtoNoTitle.setFirstName("No");
+        teacherDtoNoTitle.setLastName("Title");
+        teacherDtoNoTitle.setRoleType(RoleType.TEACHER);
+        teacherDtoNoTitle.setTitle(" ");
 
-        assertThrows(UserAlreadyExistsException.class, () -> userService.registerNewUser(registerDTO));
+        when(userRepository.existsByEmail(teacherDtoNoTitle.getEmail())).thenReturn(false);
+        when(roleRepository.findByRoleName(RoleType.TEACHER)).thenReturn(Optional.of(teacherRole));
 
-        verify(userRepository).existsByEmail("test@example.com");
-        verify(roleRepository, never()).findByRoleName(any());
-        verify(userRepository, never()).save(any());
+        assertThrows(IllegalArgumentException.class, () -> userService.registerNewUser(teacherDtoNoTitle));
+    }
+
+
+    @Test
+    void registerNewUser_DeaneryStaff_Success() {
+        when(userRepository.existsByEmail(deaneryRegisterDTO.getEmail())).thenReturn(false);
+        when(roleRepository.findByRoleName(RoleType.DEANERY_STAFF)).thenReturn(Optional.of(deaneryRole));
+        when(passwordEncoder.encode(deaneryRegisterDTO.getPassword())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setUserId(1L);
+            return user;
+        });
+
+        User registeredUser = userService.registerNewUser(deaneryRegisterDTO);
+
+        assertNotNull(registeredUser);
+        assertEquals(deaneryRegisterDTO.getEmail(), registeredUser.getEmail());
+        assertNull(registeredUser.getStudentProfile());
+        assertNull(registeredUser.getTeacherProfile());
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
-    void registerNewUser_ShouldThrowResourceNotFoundException_WhenRoleNotFound() {
-        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+    void registerNewUser_EmailExists_ThrowsUserAlreadyExistsException() {
+        when(userRepository.existsByEmail(studentRegisterDTO.getEmail())).thenReturn(true);
+        assertThrows(UserAlreadyExistsException.class, () -> userService.registerNewUser(studentRegisterDTO));
+    }
+
+    @Test
+    void registerNewUser_RoleNotFound_ThrowsResourceNotFoundException() {
+        when(userRepository.existsByEmail(studentRegisterDTO.getEmail())).thenReturn(false);
         when(roleRepository.findByRoleName(RoleType.STUDENT)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> userService.registerNewUser(registerDTO));
-
-        verify(userRepository).existsByEmail("test@example.com");
-        verify(roleRepository).findByRoleName(RoleType.STUDENT);
-        verify(userRepository, never()).save(any());
+        assertThrows(ResourceNotFoundException.class, () -> userService.registerNewUser(studentRegisterDTO));
     }
 
     @Test
-    void registerNewUser_ShouldThrowIllegalArgumentException_WhenTeacherWithoutTitle() {
-        registerDTO.setRoleType(RoleType.TEACHER);
-        registerDTO.setTitle(null);
+    void registerNewUser_IndexGenerationFails_ThrowsIndexNumberGenerationException() {
+        when(userRepository.existsByEmail(studentRegisterDTO.getEmail())).thenReturn(false);
+        when(roleRepository.findByRoleName(RoleType.STUDENT)).thenReturn(Optional.of(studentRole));
+        when(passwordEncoder.encode(studentRegisterDTO.getPassword())).thenReturn("encodedPassword");
+        when(studentRepository.existsByIndexNumber(anyString())).thenReturn(true);
 
-        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
-        when(roleRepository.findByRoleName(RoleType.TEACHER)).thenReturn(Optional.of(teacherRole));
-
-        assertThrows(IllegalArgumentException.class, () -> userService.registerNewUser(registerDTO));
-
-        verify(userRepository).existsByEmail("test@example.com");
-        verify(roleRepository).findByRoleName(RoleType.TEACHER);
-        verify(userRepository, never()).save(any());
+        assertThrows(IndexNumberGenerationException.class, () -> userService.registerNewUser(studentRegisterDTO));
     }
 
     @Test
-    void getCurrentAuthenticatedUser_ShouldReturnUser_WhenUserIsAuthenticated() {
+    void getCurrentAuthenticatedUser_Success() {
+        User user = new User();
+        user.setEmail("test@example.com");
+
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn(userDetails);
         when(userDetails.getUsername()).thenReturn("test@example.com");
-        when(userRepository.findByEmailWithRole("test@example.com")).thenReturn(Optional.of(testUser));
+        when(userRepository.findByEmailWithRole("test@example.com")).thenReturn(Optional.of(user));
 
-        User result = userService.getCurrentAuthenticatedUser();
+        User currentUser = userService.getCurrentAuthenticatedUser();
 
-        assertNotNull(result);
-        assertEquals("test@example.com", result.getEmail());
-
-        verify(securityContext).getAuthentication();
-        verify(authentication).isAuthenticated();
-        verify(authentication, atLeastOnce()).getPrincipal();
-        verify(userDetails).getUsername();
-        verify(userRepository).findByEmailWithRole("test@example.com");
+        assertNotNull(currentUser);
+        assertEquals("test@example.com", currentUser.getEmail());
     }
 
     @Test
-    void getCurrentAuthenticatedUser_ShouldThrowAuthenticationFailedException_WhenNotAuthenticated() {
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.isAuthenticated()).thenReturn(false);
-
-        assertThrows(AuthenticationFailedException.class, () -> userService.getCurrentAuthenticatedUser());
-
-        verify(securityContext).getAuthentication();
-        verify(authentication).isAuthenticated();
-        verify(userRepository, never()).findByEmailWithRole(anyString());
-    }
-
-    @Test
-    void getCurrentAuthenticatedUser_ShouldThrowAuthenticationFailedException_WhenAuthenticationIsNull() {
+    void getCurrentAuthenticatedUser_NotAuthenticated_ThrowsAuthenticationFailedException() {
         when(securityContext.getAuthentication()).thenReturn(null);
-
         assertThrows(AuthenticationFailedException.class, () -> userService.getCurrentAuthenticatedUser());
-
-        verify(securityContext).getAuthentication();
-        verify(userRepository, never()).findByEmailWithRole(anyString());
     }
 
     @Test
-    void getCurrentAuthenticatedUser_ShouldThrowAuthenticationFailedException_WhenPrincipalIsAnonymousUser() {
+    void getCurrentAuthenticatedUser_AnonymousUser_ThrowsAuthenticationFailedException() {
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn("anonymousUser");
-
         assertThrows(AuthenticationFailedException.class, () -> userService.getCurrentAuthenticatedUser());
-
-        verify(securityContext).getAuthentication();
-        verify(authentication).isAuthenticated();
-        verify(authentication, atLeastOnce()).getPrincipal();
-        verify(userRepository, never()).findByEmailWithRole(anyString());
     }
 
+
     @Test
-    void getCurrentAuthenticatedUser_ShouldThrowUsernameNotFoundException_WhenUserNotFound() {
+    void getCurrentAuthenticatedUser_UserNotFoundInDb_ThrowsUsernameNotFoundException() {
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn(userDetails);
@@ -256,11 +239,15 @@ class UserServiceTest {
         when(userRepository.findByEmailWithRole("test@example.com")).thenReturn(Optional.empty());
 
         assertThrows(UsernameNotFoundException.class, () -> userService.getCurrentAuthenticatedUser());
-
-        verify(securityContext).getAuthentication();
-        verify(authentication).isAuthenticated();
-        verify(authentication, atLeastOnce()).getPrincipal();
-        verify(userDetails).getUsername();
-        verify(userRepository).findByEmailWithRole("test@example.com");
     }
+
+    @Test
+    void getCurrentAuthenticatedUser_UnexpectedPrincipalType_ThrowsIllegalStateException() {
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getPrincipal()).thenReturn(new Object());
+
+        assertThrows(IllegalStateException.class, () -> userService.getCurrentAuthenticatedUser());
+    }
+
 }

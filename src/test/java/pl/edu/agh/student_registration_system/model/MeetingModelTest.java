@@ -1,98 +1,133 @@
 package pl.edu.agh.student_registration_system.model;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import java.time.LocalDateTime;
-import java.util.HashSet;
-import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@DataJpaTest
 class MeetingModelTest {
 
-    @Test
-    void shouldCreateMeetingWithAllFields() {
-        CourseGroup group = new CourseGroup();
-        LocalDateTime meetingDate = LocalDateTime.now();
+    @Autowired
+    private TestEntityManager entityManager;
 
-        Meeting meeting = new Meeting();
-        meeting.setMeetingId(1L);
-        meeting.setMeetingNumber(1);
-        meeting.setMeetingDate(meetingDate);
-        meeting.setTopic("Introduction");
-        meeting.setGroup(group);
+    private CourseGroup testCourseGroup;
+    private Role studentRole;
+    private Role teacherRole;
 
-        assertEquals(1L, meeting.getMeetingId());
-        assertEquals(1, meeting.getMeetingNumber());
-        assertEquals(meetingDate, meeting.getMeetingDate());
-        assertEquals("Introduction", meeting.getTopic());
-        assertEquals(group, meeting.getGroup());
-        assertNotNull(meeting.getAttendanceRecords());
+
+    @BeforeEach
+    void setUp() {
+        studentRole = new Role(RoleType.STUDENT);
+        entityManager.persist(studentRole);
+        teacherRole = new Role(RoleType.TEACHER);
+        entityManager.persist(teacherRole);
+
+        Course testCourse = new Course(null, "Physics", "PHYS101", "Physics intro", 4, new HashSet<>(), new HashSet<>());
+        entityManager.persist(testCourse);
+
+        User teacherUserForGroup = new User(null, "Mike", "Ehrmantraut", "pass", "m.ehrmantraut@example.com", true, teacherRole, null, null);
+        entityManager.persist(teacherUserForGroup);
+        Teacher groupTeacher = new Teacher(null, "Prof.", teacherUserForGroup, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(groupTeacher);
+        testCourseGroup = new CourseGroup(null, 1, 20, testCourse, groupTeacher, new HashSet<>(), new ArrayList<>());
+        entityManager.persist(testCourseGroup);
+
+        entityManager.flush();
+        entityManager.clear();
     }
 
     @Test
-    void shouldCreateMeetingWithConstructor() {
-        CourseGroup group = new CourseGroup();
+    void testPersistAndFindMeeting() {
         LocalDateTime meetingDate = LocalDateTime.now();
+        Meeting meeting = new Meeting(null, 1, meetingDate, "Lecture 1", testCourseGroup, new HashSet<>());
+        Meeting savedMeeting = entityManager.persistAndFlush(meeting);
 
-        Meeting meeting = new Meeting(1L, 1, meetingDate, "Introduction", group, new HashSet<>());
+        assertThat(savedMeeting).isNotNull();
+        assertThat(savedMeeting.getMeetingId()).isNotNull();
+        assertThat(savedMeeting.getMeetingNumber()).isEqualTo(1);
+        assertThat(savedMeeting.getMeetingDate()).isEqualToIgnoringNanos(meetingDate);
+        assertThat(savedMeeting.getTopic()).isEqualTo("Lecture 1");
+        assertThat(savedMeeting.getGroup().getCourseGroupId()).isEqualTo(testCourseGroup.getCourseGroupId());
 
-        assertEquals(1L, meeting.getMeetingId());
-        assertEquals(1, meeting.getMeetingNumber());
-        assertEquals(meetingDate, meeting.getMeetingDate());
-        assertEquals("Introduction", meeting.getTopic());
-        assertEquals(group, meeting.getGroup());
-        assertNotNull(meeting.getAttendanceRecords());
+        Meeting foundMeeting = entityManager.find(Meeting.class, savedMeeting.getMeetingId());
+        assertThat(foundMeeting).isEqualTo(savedMeeting);
     }
 
     @Test
-    void shouldAddAttendanceRecord() {
-        Meeting meeting = new Meeting();
-        Attendance attendance = new Attendance();
-        attendance.setMeeting(meeting);
+    void testUniqueConstraintForGroupAndMeetingNumber() {
+        Meeting meeting1 = new Meeting(null, 1, LocalDateTime.now().minusHours(1), "Topic A", testCourseGroup, new HashSet<>());
+        entityManager.persistAndFlush(meeting1);
 
+        Meeting meeting2 = new Meeting(null, 1, LocalDateTime.now(), "Topic B", testCourseGroup, new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(meeting2);
+        });
+    }
+
+    @Test
+    void testMeetingNumberIsNotNull() {
+        Meeting meeting = new Meeting(null, null, LocalDateTime.now(), "Topic", testCourseGroup, new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(meeting);
+        });
+    }
+
+    @Test
+    void testMeetingDateIsNotNull() {
+        Meeting meeting = new Meeting(null, 1, null, "Topic", testCourseGroup, new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(meeting);
+        });
+    }
+
+    @Test
+    void testCourseGroupIsNotNull() {
+        Meeting meeting = new Meeting(null, 1, LocalDateTime.now(), "Topic", null, new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(meeting);
+        });
+    }
+
+    @Test
+    void testOneToManyAttendanceRecordsRelationship() {
+        Meeting meeting = new Meeting(null, 1, LocalDateTime.now(), "Test Meeting", testCourseGroup, new HashSet<>());
+        entityManager.persist(meeting);
+
+        User studentUser = new User(null, "Todd", "Alquist", "pass", "t.alquist@example.com", true, studentRole, null, null);
+        entityManager.persist(studentUser);
+        Student student = new Student(null, "334455", studentUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(student);
+
+        User attendanceTeacherUser = new User(null, "Lydia", "Rodarte-Quayle", "passL", "l.rodarte@example.com", true, teacherRole, null, null);
+        entityManager.persist(attendanceTeacherUser);
+        Teacher attendanceTeacher = new Teacher(null, "Ms.", attendanceTeacherUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(attendanceTeacher);
+
+        Attendance attendance = new Attendance(null, AttendanceStatus.PRESENT, meeting, student, attendanceTeacher);
         meeting.getAttendanceRecords().add(attendance);
+        entityManager.persistAndFlush(attendance);
+        entityManager.clear();
 
-        assertEquals(1, meeting.getAttendanceRecords().size());
-        assertTrue(meeting.getAttendanceRecords().contains(attendance));
-    }
+        Meeting foundMeeting = entityManager.find(Meeting.class, meeting.getMeetingId());
+        assertThat(foundMeeting.getAttendanceRecords()).hasSize(1);
+        assertThat(foundMeeting.getAttendanceRecords().iterator().next().getStudent().getStudentId()).isEqualTo(student.getStudentId());
+        assertThat(foundMeeting.getAttendanceRecords().iterator().next().getRecordedByTeacher().getTeacherId()).isEqualTo(attendanceTeacher.getTeacherId());
 
-    @Test
-    void shouldUpdateTopic() {
-        Meeting meeting = new Meeting();
-        meeting.setTopic("Initial topic");
 
-        assertEquals("Initial topic", meeting.getTopic());
-
-        meeting.setTopic("Updated topic");
-        assertEquals("Updated topic", meeting.getTopic());
-    }
-
-    @Test
-    void shouldImplementEqualsAndHashCode() {
-        Meeting meeting1 = new Meeting();
-        meeting1.setMeetingId(1L);
-
-        Meeting meeting2 = new Meeting();
-        meeting2.setMeetingId(1L);
-
-        Meeting meeting3 = new Meeting();
-        meeting3.setMeetingId(2L);
-
-        assertEquals(meeting1, meeting2);
-        assertNotEquals(meeting1, meeting3);
-        assertEquals(meeting1.hashCode(), meeting2.hashCode());
-        assertNotEquals(meeting1.hashCode(), meeting3.hashCode());
-    }
-
-    @Test
-    void shouldImplementToString() {
-        Meeting meeting = new Meeting();
-        meeting.setMeetingId(1L);
-        meeting.setMeetingNumber(1);
-        meeting.setTopic("Introduction");
-
-        String toString = meeting.toString();
-
-        assertTrue(toString.contains("meetingId=1"));
-        assertTrue(toString.contains("meetingNumber=1"));
-        assertTrue(toString.contains("topic=Introduction"));
+        foundMeeting.getAttendanceRecords().clear();
+        entityManager.flush();
+        entityManager.clear();
+        foundMeeting = entityManager.find(Meeting.class, meeting.getMeetingId());
+        assertThat(foundMeeting.getAttendanceRecords()).isEmpty();
     }
 }

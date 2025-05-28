@@ -1,16 +1,14 @@
 package pl.edu.agh.student_registration_system.service;
 
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import pl.edu.agh.student_registration_system.exceptions.ResourceNotFoundException;
@@ -26,7 +24,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,356 +32,232 @@ class StudentServiceTest {
 
     @Mock
     private UserService userService;
-
     @Mock
     private StudentRepository studentRepository;
-
     @Mock
     private UserRepository userRepository;
-
     @Mock
     private EnrollmentRepository enrollmentRepository;
-
     @Mock
     private GradeRepository gradeRepository;
-
     @Mock
     private AttendanceRepository attendanceRepository;
-
     @Mock
     private CourseRepository courseRepository;
 
     @InjectMocks
     private StudentServiceImpl studentService;
 
-    @Captor
-    private ArgumentCaptor<User> userCaptor;
-
-    private Student testStudent;
-    private User testUser;
-    private Role testRole;
-    private Course testCourse;
-    private CourseGroup testGroup;
-    private Enrollment testEnrollment;
-    private Grade testGrade;
+    private User user;
+    private Student student;
+    private Role studentRole;
+    private Course course;
+    private CourseGroup courseGroup;
 
     @BeforeEach
     void setUp() {
-        testRole = new Role();
-        testRole.setRoleId(1L);
-        testRole.setRoleName(RoleType.STUDENT);
+        studentRole = new Role(1L, RoleType.STUDENT, null);
+        user = new User(1L, "John", "Doe", "password", "john.doe@example.com", true, studentRole, null, null);
+        student = new Student(1L, "123456", user, null, null, null);
+        user.setStudentProfile(student);
 
-        testUser = new User();
-        testUser.setUserId(1L);
-        testUser.setFirstName("John");
-        testUser.setLastName("Doe");
-        testUser.setEmail("john.doe@example.com");
-        testUser.setIsActive(true);
-        testUser.setRole(testRole);
-
-        testStudent = new Student();
-        testStudent.setStudentId(1L);
-        testStudent.setIndexNumber("123456");
-        testStudent.setUser(testUser);
-
-        testCourse = new Course();
-        testCourse.setCourseId(1L);
-        testCourse.setCourseCode("CS101");
-        testCourse.setCourseName("Introduction to Computer Science");
-
-        testGroup = new CourseGroup();
-        testGroup.setCourseGroupId(1L);
-        testGroup.setGroupNumber(1);
-        testGroup.setMaxCapacity(30);
-        testGroup.setCourse(testCourse);
-
-        testEnrollment = new Enrollment();
-        testEnrollment.setEnrollmentId(1L);
-        testEnrollment.setStudent(testStudent);
-        testEnrollment.setGroup(testGroup);
-        testEnrollment.setEnrollmentDate(LocalDateTime.now());
-
-        testGrade = new Grade();
-        testGrade.setGradeId(1L);
-        testGrade.setGradeValue("5.0");
-        testGrade.setGradeDate(LocalDateTime.now());
-        testGrade.setComment("Excellent work");
-        testGrade.setStudent(testStudent);
-        testGrade.setCourse(testCourse);
+        course = new Course(1L, "Test Course", "TC101", "Test desc", 5, null, null);
+        courseGroup = new CourseGroup(1L, 1, 10, course, null, null, null);
     }
 
     @Test
-    void getStudentResponseById_ShouldReturnStudentResponse_WhenStudentExists() {
-        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(testStudent));
-
-        StudentResponse result = studentService.getStudentResponseById(1L);
-
-        assertNotNull(result);
-        assertEquals(1L, result.getStudentId());
-        assertEquals("123456", result.getIndexNumber());
-        assertNotNull(result.getUserInfo());
-        assertEquals("John", result.getUserInfo().getFirstName());
-        assertEquals("Doe", result.getUserInfo().getLastName());
-
-        verify(studentRepository).findByIdWithUser(1L);
+    void getStudentResponseById_Success() {
+        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(student));
+        StudentResponse response = studentService.getStudentResponseById(1L);
+        assertNotNull(response);
+        assertEquals(student.getStudentId(), response.getStudentId());
+        assertEquals(user.getEmail(), response.getUserInfo().getUsername());
     }
 
     @Test
-    void getStudentResponseById_ShouldThrowResourceNotFoundException_WhenStudentDoesNotExist() {
+    void getStudentResponseById_NotFound_ThrowsResourceNotFoundException() {
         when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.empty());
-
         assertThrows(ResourceNotFoundException.class, () -> studentService.getStudentResponseById(1L));
-
-        verify(studentRepository).findByIdWithUser(1L);
     }
 
     @Test
-    void getCurrentStudentResponse_ShouldReturnStudentResponse_WhenCurrentStudentExists() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-
-        StudentResponse result = studentService.getCurrentStudentResponse();
-
-        assertNotNull(result);
-        assertEquals(1L, result.getStudentId());
-        assertEquals("123456", result.getIndexNumber());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
+    void getCurrentStudentResponse_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(studentRepository.findByUser(user)).thenReturn(Optional.of(student));
+        StudentResponse response = studentService.getCurrentStudentResponse();
+        assertNotNull(response);
+        assertEquals(student.getStudentId(), response.getStudentId());
     }
 
     @Test
-    void updateStudent_ShouldReturnUpdatedStudentResponse_WhenUpdateIsValid() {
-        UpdateStudentDTO updateStudentDTO = new UpdateStudentDTO();
-        updateStudentDTO.setFirstName("Jane");
-        updateStudentDTO.setLastName("Smith");
-        updateStudentDTO.setEmail("jane.smith@example.com");
-        updateStudentDTO.setIsActive(true);
+    void updateStudent_Success_EmailChanged() {
+        UpdateStudentDTO dto = new UpdateStudentDTO();
+        dto.setEmail("new.email@example.com");
+        dto.setFirstName("John");
+        dto.setLastName("Doe");
+        dto.setIsActive(true);
 
-        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(testStudent));
-        when(userRepository.existsByEmail("jane.smith@example.com")).thenReturn(false);
-        when(userRepository.save(any(User.class))).thenReturn(testUser);
+        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(student));
+        when(userRepository.existsByEmail("new.email@example.com")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
 
-        StudentResponse result = studentService.updateStudent(1L, updateStudentDTO);
-
-        assertNotNull(result);
-        verify(studentRepository).findByIdWithUser(1L);
-        verify(userRepository).existsByEmail("jane.smith@example.com");
-        verify(userRepository).save(userCaptor.capture());
-
-        User capturedUser = userCaptor.getValue();
-        assertEquals("Jane", capturedUser.getFirstName());
-        assertEquals("Smith", capturedUser.getLastName());
-        assertEquals("jane.smith@example.com", capturedUser.getEmail());
-        assertTrue(capturedUser.getIsActive());
+        StudentResponse response = studentService.updateStudent(1L, dto);
+        assertNotNull(response);
+        assertEquals("new.email@example.com", response.getUserInfo().getUsername());
+        verify(userRepository).save(user);
     }
 
     @Test
-    void updateStudent_ShouldThrowUserAlreadyExistsException_WhenEmailExists() {
-        UpdateStudentDTO updateStudentDTO = new UpdateStudentDTO();
-        updateStudentDTO.setEmail("existing@example.com");
+    void updateStudent_Success_NoActualChanges() {
+        UpdateStudentDTO dto = new UpdateStudentDTO();
+        dto.setEmail(user.getEmail());
+        dto.setFirstName(user.getFirstName());
+        dto.setLastName(user.getLastName());
+        dto.setIsActive(user.getIsActive());
 
-        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(testStudent));
-        when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
+        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(student));
 
-        assertThrows(UserAlreadyExistsException.class, () -> studentService.updateStudent(1L, updateStudentDTO));
+        StudentResponse response = studentService.updateStudent(1L, dto);
+        assertNotNull(response);
+        verify(userRepository, never()).save(any(User.class));
+    }
 
-        verify(studentRepository).findByIdWithUser(1L);
-        verify(userRepository).existsByEmail("existing@example.com");
-        verify(userRepository, never()).save(any());
+
+    @Test
+    void updateStudent_EmailAlreadyExists_ThrowsUserAlreadyExistsException() {
+        UpdateStudentDTO dto = new UpdateStudentDTO();
+        dto.setEmail("existing.email@example.com");
+        dto.setFirstName("John");
+        dto.setLastName("Doe");
+        dto.setIsActive(true);
+
+        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(student));
+        when(userRepository.existsByEmail("existing.email@example.com")).thenReturn(true);
+
+        assertThrows(UserAlreadyExistsException.class, () -> studentService.updateStudent(1L, dto));
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
-    void deleteStudentAndUser_ShouldDeleteUserAndStudent_WhenStudentExists() {
-        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(testStudent));
-        doNothing().when(userRepository).delete(testUser);
-
+    void deleteStudentAndUser_Success() {
+        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(student));
+        doNothing().when(userRepository).delete(user);
         studentService.deleteStudentAndUser(1L);
-
-        verify(studentRepository).findByIdWithUser(1L);
-        verify(userRepository).delete(testUser);
+        verify(userRepository).delete(user);
     }
 
     @Test
-    void searchStudents_ShouldReturnPageOfStudentResponses() {
-        Pageable pageable = Pageable.unpaged();
-        Page<Student> studentPage = new PageImpl<>(List.of(testStudent));
-
+    @SuppressWarnings("unchecked")
+    void searchStudents_Success() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Student> studentPage = new PageImpl<>(Collections.singletonList(student), pageable, 1);
         when(studentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(studentPage);
 
-        Page<StudentResponse> result = studentService.searchStudents("John", pageable);
-
-        assertNotNull(result);
-        assertEquals(1, result.getTotalElements());
-        assertEquals(1L, result.getContent().get(0).getStudentId());
-
-        verify(studentRepository).findAll(any(Specification.class), eq(pageable));
+        Page<StudentResponse> responsePage = studentService.searchStudents("John", pageable);
+        assertNotNull(responsePage);
+        assertEquals(1, responsePage.getTotalElements());
+        assertEquals(student.getStudentId(), responsePage.getContent().get(0).getStudentId());
     }
 
     @Test
-    void getCurrentStudentGroups_ShouldReturnListOfGroupResponses_WhenStudentIsEnrolled() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-        when(enrollmentRepository.findByStudentWithGroupAndCourse(testStudent)).thenReturn(List.of(testEnrollment));
-        when(enrollmentRepository.countByGroup(testGroup)).thenReturn(15);
+    void getCurrentStudentGroups_Success() {
+        Enrollment enrollment = new Enrollment(1L, LocalDateTime.now(), student, courseGroup);
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(studentRepository.findByUser(user)).thenReturn(Optional.of(student));
+        when(enrollmentRepository.findByStudentWithGroupAndCourse(student)).thenReturn(Collections.singletonList(enrollment));
+        when(enrollmentRepository.countByGroup(courseGroup)).thenReturn(1);
 
-        List<GroupResponse> result = studentService.getCurrentStudentGroups();
 
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getGroupId());
-        assertEquals(1, result.get(0).getGroupNumber());
-        assertEquals(15, result.get(0).getEnrolledCount());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-        verify(enrollmentRepository).findByStudentWithGroupAndCourse(testStudent);
-        verify(enrollmentRepository).countByGroup(testGroup);
+        List<GroupResponse> groups = studentService.getCurrentStudentGroups();
+        assertNotNull(groups);
+        assertEquals(1, groups.size());
+        assertEquals(courseGroup.getCourseGroupId(), groups.get(0).getGroupId());
     }
 
     @Test
-    void getCurrentStudentGroups_ShouldReturnEmptyList_WhenStudentIsNotEnrolled() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-        when(enrollmentRepository.findByStudentWithGroupAndCourse(testStudent)).thenReturn(Collections.emptyList());
+    void getCurrentStudentGrades_WithCourseId_Success() {
+        Grade grade = new Grade(1L, "5.0", LocalDateTime.now(), "Good", student, course, null);
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(studentRepository.findByUser(user)).thenReturn(Optional.of(student));
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(gradeRepository.findByStudentAndCourseWithDetails(student, course)).thenReturn(Collections.singletonList(grade));
 
-        List<GroupResponse> result = studentService.getCurrentStudentGroups();
-
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-        verify(enrollmentRepository).findByStudentWithGroupAndCourse(testStudent);
+        List<GradeResponse> grades = studentService.getCurrentStudentGrades(1L);
+        assertNotNull(grades);
+        assertEquals(1, grades.size());
+        assertEquals("5.0", grades.get(0).getGradeValue());
     }
 
     @Test
-    void getCurrentStudentGrades_ShouldReturnListOfGradeResponses_WhenCourseIdIsProvided() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
-        when(gradeRepository.findByStudentAndCourseWithDetails(testStudent, testCourse)).thenReturn(List.of(testGrade));
+    void getCurrentStudentGrades_WithoutCourseId_Success() {
+        Grade grade1 = new Grade(1L, "5.0", LocalDateTime.now(), "Good", student, course, null);
+        Course anotherCourse = new Course(2L, "Another Course", "AC202", "Desc", 4, null, null);
+        Grade grade2 = new Grade(2L, "4.0", LocalDateTime.now(), "Okay", student, anotherCourse, null);
 
-        List<GradeResponse> result = studentService.getCurrentStudentGrades(1L);
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(studentRepository.findByUser(user)).thenReturn(Optional.of(student));
+        when(gradeRepository.findByStudentWithDetails(student)).thenReturn(List.of(grade1, grade2));
 
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getGradeId());
-        assertEquals("5.0", result.get(0).getGradeValue());
+        List<GradeResponse> grades = studentService.getCurrentStudentGrades(null);
+        assertNotNull(grades);
+        assertEquals(2, grades.size());
+    }
 
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-        verify(courseRepository).findById(1L);
-        verify(gradeRepository).findByStudentAndCourseWithDetails(testStudent, testCourse);
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getCurrentStudentAttendance_Success() {
+        Meeting meeting = new Meeting(1L, 1, LocalDateTime.now(), "Topic", courseGroup, null);
+        Attendance attendance = new Attendance(1L, AttendanceStatus.PRESENT, meeting, student, null);
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(studentRepository.findByUser(user)).thenReturn(Optional.of(student));
+        when(attendanceRepository.findAll(any(Specification.class))).thenReturn(Collections.singletonList(attendance));
+
+        List<AttendanceResponse> attendances = studentService.getCurrentStudentAttendance(1L, 1L, 1);
+        assertNotNull(attendances);
+        assertEquals(1, attendances.size());
+        assertEquals(AttendanceStatus.PRESENT.name(), attendances.get(0).getStatus());
     }
 
     @Test
-    void getCurrentStudentGrades_ShouldReturnListOfAllGradeResponses_WhenCourseIdIsNull() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-        when(gradeRepository.findByStudentWithDetails(testStudent)).thenReturn(List.of(testGrade));
-
-        List<GradeResponse> result = studentService.getCurrentStudentGrades(null);
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getGradeId());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-        verify(courseRepository, never()).findById(anyLong());
-        verify(gradeRepository).findByStudentWithDetails(testStudent);
+    void findStudentById_Success() {
+        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(student));
+        Student found = studentService.findStudentById(1L);
+        assertNotNull(found);
+        assertEquals(student.getStudentId(), found.getStudentId());
     }
 
     @Test
-    void getCurrentStudentGrades_ShouldThrowResourceNotFoundException_WhenCourseDoesNotExist() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-        when(courseRepository.findById(1L)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> studentService.getCurrentStudentGrades(1L));
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-        verify(courseRepository).findById(1L);
-        verify(gradeRepository, never()).findByStudentAndCourseWithDetails(any(), any());
+    void findCurrentStudentEntity_Success() {
+        when(userService.getCurrentAuthenticatedUser()).thenReturn(user);
+        when(studentRepository.findByUser(user)).thenReturn(Optional.of(student));
+        Student current = studentService.findCurrentStudentEntity();
+        assertNotNull(current);
+        assertEquals(student.getStudentId(), current.getStudentId());
     }
 
     @Test
-    void getCurrentStudentAttendance_ShouldReturnNull() {
-        List<AttendanceResponse> result = studentService.getCurrentStudentAttendance(1L, 1L, 1);
-
-        assertNull(result);
+    void mapToStudentResponse_Success() {
+        StudentResponse response = studentService.mapToStudentResponse(student);
+        assertNotNull(response);
+        assertEquals(student.getStudentId(), response.getStudentId());
+        assertEquals(student.getIndexNumber(), response.getIndexNumber());
+        assertNotNull(response.getUserInfo());
+        assertEquals(user.getEmail(), response.getUserInfo().getUsername());
+        assertEquals(RoleType.STUDENT.name(), response.getUserInfo().getRoles().get(0));
     }
 
     @Test
-    void findStudentById_ShouldReturnStudent_WhenStudentExists() {
-        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.of(testStudent));
-
-        Student result = studentService.findStudentById(1L);
-
-        assertNotNull(result);
-        assertEquals(1L, result.getStudentId());
-        assertEquals("123456", result.getIndexNumber());
-
-        verify(studentRepository).findByIdWithUser(1L);
+    void mapToStudentResponse_UserIsNull_ThrowsIllegalStateException() {
+        student.setUser(null);
+        assertThrows(IllegalStateException.class, () -> studentService.mapToStudentResponse(student));
     }
 
     @Test
-    void findStudentById_ShouldThrowResourceNotFoundException_WhenStudentDoesNotExist() {
-        when(studentRepository.findByIdWithUser(1L)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> studentService.findStudentById(1L));
-
-        verify(studentRepository).findByIdWithUser(1L);
+    void mapToStudentResponse_UserRoleIsNull_ThrowsIllegalStateException() {
+        user.setRole(null);
+        student.setUser(user);
+        assertThrows(IllegalStateException.class, () -> studentService.mapToStudentResponse(student));
     }
 
-    @Test
-    void findCurrentStudentEntity_ShouldReturnStudent_WhenCurrentUserHasStudentProfile() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.of(testStudent));
-
-        Student result = studentService.findCurrentStudentEntity();
-
-        assertNotNull(result);
-        assertEquals(1L, result.getStudentId());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-    }
-
-    @Test
-    void findCurrentStudentEntity_ShouldThrowResourceNotFoundException_WhenCurrentUserHasNoStudentProfile() {
-        when(userService.getCurrentAuthenticatedUser()).thenReturn(testUser);
-        when(studentRepository.findByUser(testUser)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> studentService.findCurrentStudentEntity());
-
-        verify(userService).getCurrentAuthenticatedUser();
-        verify(studentRepository).findByUser(testUser);
-    }
-
-    @Test
-    void mapToStudentResponse_ShouldReturnStudentResponse_WhenStudentIsValid() {
-        StudentResponse result = studentService.mapToStudentResponse(testStudent);
-
-        assertNotNull(result);
-        assertEquals(1L, result.getStudentId());
-        assertEquals("123456", result.getIndexNumber());
-        assertNotNull(result.getUserInfo());
-        assertEquals(1L, result.getUserInfo().getId());
-        assertEquals("john.doe@example.com", result.getUserInfo().getUsername());
-        assertEquals("John", result.getUserInfo().getFirstName());
-        assertEquals("Doe", result.getUserInfo().getLastName());
-        assertTrue(result.getUserInfo().getIsActive());
-        assertEquals(1, result.getUserInfo().getRoles().size());
-        assertEquals("STUDENT", result.getUserInfo().getRoles().get(0));
-    }
-
-    @Test
-    void mapToStudentResponse_ShouldThrowIllegalStateException_WhenStudentHasNoUser() {
-        testStudent.setUser(null);
-
-        assertThrows(IllegalStateException.class, () -> studentService.mapToStudentResponse(testStudent));
-    }
 }

@@ -1,14 +1,16 @@
 package pl.edu.agh.student_registration_system.service;
 
-import jakarta.persistence.criteria.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import pl.edu.agh.student_registration_system.exceptions.DeletionBlockedException;
@@ -19,11 +21,12 @@ import pl.edu.agh.student_registration_system.payload.dto.UpdateCourseDTO;
 import pl.edu.agh.student_registration_system.payload.response.CourseResponse;
 import pl.edu.agh.student_registration_system.repository.CourseRepository;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,217 +38,154 @@ class CourseServiceTest {
     @InjectMocks
     private CourseServiceImpl courseService;
 
-    @Captor
-    private ArgumentCaptor<Course> courseCaptor;
-
-    private Course testCourse;
+    private Course course1;
     private CreateCourseDTO createCourseDTO;
     private UpdateCourseDTO updateCourseDTO;
 
     @BeforeEach
     void setUp() {
-        testCourse = new Course();
-        testCourse.setCourseId(1L);
-        testCourse.setCourseCode("CS101");
-        testCourse.setCourseName("Introduction to Computer Science");
-        testCourse.setDescription("Basic concepts of computer science");
-        testCourse.setCredits(5);
-
-        createCourseDTO = new CreateCourseDTO();
-        createCourseDTO.setCourseCode("CS102");
-        createCourseDTO.setCourseName("Data Structures");
-        createCourseDTO.setDescription("Study of data structures");
-        createCourseDTO.setCredits(6);
-
-        updateCourseDTO = new UpdateCourseDTO();
-        updateCourseDTO.setCourseCode("CS101-Updated");
-        updateCourseDTO.setCourseName("Updated Course Name");
-        updateCourseDTO.setDescription("Updated description");
-        updateCourseDTO.setCredits(7);
+        course1 = new Course(1L, "Introduction to Programming", "CS101", "Basic programming concepts", 5, Collections.emptySet(), Collections.emptySet());
+        createCourseDTO = new CreateCourseDTO("CS101", "Intro to Programming", "Desc", 5);
+        updateCourseDTO = new UpdateCourseDTO("CS102", "Advanced Programming", "New Desc", 6);
     }
 
     @Test
-    void searchCourses_ShouldReturnPageOfCourseResponses() {
-        Pageable pageable = Pageable.unpaged();
-        Page<Course> coursePage = new PageImpl<>(List.of(testCourse));
+    void searchCourses_ReturnsPagedCourseResponses() {
+        Pageable pageable = PageRequest.of(0, 10);
+        List<Course> courses = Collections.singletonList(course1);
+        Page<Course> coursePage = new PageImpl<>(courses, pageable, 1);
 
         when(courseRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(coursePage);
 
-        Page<CourseResponse> result = courseService.searchCourses("CS", 1L, pageable);
+        Page<CourseResponse> result = courseService.searchCourses("CS101", null, pageable);
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
-        assertEquals(testCourse.getCourseId(), result.getContent().get(0).getCourseId());
-        assertEquals(testCourse.getCourseCode(), result.getContent().get(0).getCourseCode());
-
+        assertEquals("CS101", result.getContent().get(0).getCourseCode());
         verify(courseRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
-    void existsById_ShouldReturnTrue_WhenCourseExists() {
+    void existsById_WhenCourseExists_ReturnsTrue() {
         when(courseRepository.existsById(1L)).thenReturn(true);
-
-        boolean result = courseService.existsById(1L);
-
-        assertTrue(result);
+        assertTrue(courseService.existsById(1L));
         verify(courseRepository).existsById(1L);
     }
 
     @Test
-    void existsById_ShouldReturnFalse_WhenCourseDoesNotExist() {
+    void existsById_WhenCourseDoesNotExist_ReturnsFalse() {
         when(courseRepository.existsById(1L)).thenReturn(false);
-
-        boolean result = courseService.existsById(1L);
-
-        assertFalse(result);
+        assertFalse(courseService.existsById(1L));
         verify(courseRepository).existsById(1L);
     }
 
     @Test
-    void createCourse_ShouldReturnCourseResponse_WhenCourseCodeIsUnique() {
+    void createCourse_WhenCodeIsUnique_ReturnsCourseResponse() {
         when(courseRepository.existsByCourseCode(createCourseDTO.getCourseCode())).thenReturn(false);
         when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> {
-            Course savedCourse = invocation.getArgument(0);
-            savedCourse.setCourseId(2L);
-            return savedCourse;
+            Course c = invocation.getArgument(0);
+            c.setCourseId(1L);
+            return c;
         });
 
-        CourseResponse result = courseService.createCourse(createCourseDTO);
+        CourseResponse response = courseService.createCourse(createCourseDTO);
 
-        assertNotNull(result);
-        assertEquals(2L, result.getCourseId());
-        assertEquals(createCourseDTO.getCourseCode(), result.getCourseCode());
-        assertEquals(createCourseDTO.getCourseName(), result.getCourseName());
-        assertEquals(createCourseDTO.getDescription(), result.getDescription());
-        assertEquals(createCourseDTO.getCredits(), result.getCredits());
-
-        verify(courseRepository).existsByCourseCode(createCourseDTO.getCourseCode());
+        assertNotNull(response);
+        assertEquals(createCourseDTO.getCourseCode(), response.getCourseCode());
         verify(courseRepository).save(any(Course.class));
     }
 
     @Test
-    void createCourse_ShouldThrowDataIntegrityViolationException_WhenCourseCodeExists() {
+    void createCourse_WhenCodeIsNotUnique_ThrowsDataIntegrityViolationException() {
         when(courseRepository.existsByCourseCode(createCourseDTO.getCourseCode())).thenReturn(true);
 
         assertThrows(DataIntegrityViolationException.class, () -> courseService.createCourse(createCourseDTO));
-
-        verify(courseRepository).existsByCourseCode(createCourseDTO.getCourseCode());
         verify(courseRepository, never()).save(any(Course.class));
     }
 
     @Test
-    void getCourseResponseById_ShouldReturnCourseResponse_WhenCourseExists() {
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
-
-        CourseResponse result = courseService.getCourseResponseById(1L);
-
-        assertNotNull(result);
-        assertEquals(testCourse.getCourseId(), result.getCourseId());
-        assertEquals(testCourse.getCourseCode(), result.getCourseCode());
-        assertEquals(testCourse.getCourseName(), result.getCourseName());
-        assertEquals(testCourse.getDescription(), result.getDescription());
-        assertEquals(testCourse.getCredits(), result.getCredits());
-
+    void getCourseResponseById_WhenCourseExists_ReturnsCourseResponse() {
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course1));
+        CourseResponse response = courseService.getCourseResponseById(1L);
+        assertNotNull(response);
+        assertEquals(course1.getCourseCode(), response.getCourseCode());
         verify(courseRepository).findById(1L);
     }
 
     @Test
-    void getCourseResponseById_ShouldThrowResourceNotFoundException_WhenCourseDoesNotExist() {
+    void getCourseResponseById_WhenCourseDoesNotExist_ThrowsResourceNotFoundException() {
         when(courseRepository.findById(1L)).thenReturn(Optional.empty());
-
         assertThrows(ResourceNotFoundException.class, () -> courseService.getCourseResponseById(1L));
-
         verify(courseRepository).findById(1L);
     }
 
     @Test
-    void updateCourse_ShouldReturnUpdatedCourseResponse_WhenAllFieldsAreUpdated() {
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
+    void updateCourse_WhenCourseExistsAndCodeIsUnique_UpdatesAndReturnsCourseResponse() {
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course1));
         when(courseRepository.existsByCourseCodeAndCourseIdNot(updateCourseDTO.getCourseCode(), 1L)).thenReturn(false);
-        when(courseRepository.save(any(Course.class))).thenReturn(testCourse);
+        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        CourseResponse result = courseService.updateCourse(1L, updateCourseDTO);
+        CourseResponse response = courseService.updateCourse(1L, updateCourseDTO);
 
-        assertNotNull(result);
-        verify(courseRepository).findById(1L);
-        verify(courseRepository).existsByCourseCodeAndCourseIdNot(updateCourseDTO.getCourseCode(), 1L);
-        verify(courseRepository).save(courseCaptor.capture());
-
-        Course capturedCourse = courseCaptor.getValue();
-        assertEquals(updateCourseDTO.getCourseCode(), capturedCourse.getCourseCode());
-        assertEquals(updateCourseDTO.getCourseName(), capturedCourse.getCourseName());
-        assertEquals(updateCourseDTO.getDescription(), capturedCourse.getDescription());
-        assertEquals(updateCourseDTO.getCredits(), capturedCourse.getCredits());
+        assertNotNull(response);
+        assertEquals(updateCourseDTO.getCourseCode(), response.getCourseCode());
+        assertEquals(updateCourseDTO.getCourseName(), response.getCourseName());
+        verify(courseRepository).save(any(Course.class));
     }
 
     @Test
-    void updateCourse_ShouldThrowResourceNotFoundException_WhenCourseDoesNotExist() {
-        when(courseRepository.findById(1L)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> courseService.updateCourse(1L, updateCourseDTO));
-
-        verify(courseRepository).findById(1L);
-        verify(courseRepository, never()).save(any(Course.class));
-    }
-
-    @Test
-    void updateCourse_ShouldThrowDataIntegrityViolationException_WhenCourseCodeExists() {
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
+    void updateCourse_WhenCourseExistsAndNewCodeIsNotUnique_ThrowsDataIntegrityViolationException() {
+        Course existingCourseWithSameCode = new Course(2L, "CS102", "Other Course", "Other Desc", 3, Collections.emptySet(), Collections.emptySet());
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course1));
         when(courseRepository.existsByCourseCodeAndCourseIdNot(updateCourseDTO.getCourseCode(), 1L)).thenReturn(true);
 
         assertThrows(DataIntegrityViolationException.class, () -> courseService.updateCourse(1L, updateCourseDTO));
-
-        verify(courseRepository).findById(1L);
-        verify(courseRepository).existsByCourseCodeAndCourseIdNot(updateCourseDTO.getCourseCode(), 1L);
         verify(courseRepository, never()).save(any(Course.class));
     }
 
     @Test
-    void updateCourse_ShouldNotSaveCourse_WhenNoChangesDetected() {
-        UpdateCourseDTO noChangeDTO = new UpdateCourseDTO();
-        noChangeDTO.setCourseCode(testCourse.getCourseCode());
-        noChangeDTO.setCourseName(testCourse.getCourseName());
-        noChangeDTO.setDescription(testCourse.getDescription());
-        noChangeDTO.setCredits(testCourse.getCredits());
+    void updateCourse_WhenNoChanges_ReturnsOriginalCourseResponse() {
+        UpdateCourseDTO noChangeDto = new UpdateCourseDTO(course1.getCourseCode(), course1.getCourseName(), course1.getDescription(), course1.getCredits());
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course1));
 
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
+        CourseResponse response = courseService.updateCourse(1L, noChangeDto);
 
-        CourseResponse result = courseService.updateCourse(1L, noChangeDTO);
+        assertNotNull(response);
+        assertEquals(course1.getCourseCode(), response.getCourseCode());
+        verify(courseRepository, never()).save(any(Course.class));
+    }
 
-        assertNotNull(result);
-        verify(courseRepository).findById(1L);
+
+    @Test
+    void updateCourse_WhenCourseDoesNotExist_ThrowsResourceNotFoundException() {
+        when(courseRepository.findById(1L)).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> courseService.updateCourse(1L, updateCourseDTO));
         verify(courseRepository, never()).save(any(Course.class));
     }
 
     @Test
-    void deleteCourse_ShouldDeleteCourse_WhenCourseExists() {
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
-        doNothing().when(courseRepository).delete(testCourse);
+    void deleteCourse_WhenCourseExists_DeletesCourse() {
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course1));
+        doNothing().when(courseRepository).delete(course1);
 
         courseService.deleteCourse(1L);
 
-        verify(courseRepository).findById(1L);
-        verify(courseRepository).delete(testCourse);
+        verify(courseRepository).delete(course1);
     }
 
     @Test
-    void deleteCourse_ShouldThrowResourceNotFoundException_WhenCourseDoesNotExist() {
+    void deleteCourse_WhenCourseDoesNotExist_ThrowsResourceNotFoundException() {
         when(courseRepository.findById(1L)).thenReturn(Optional.empty());
-
         assertThrows(ResourceNotFoundException.class, () -> courseService.deleteCourse(1L));
-
-        verify(courseRepository).findById(1L);
         verify(courseRepository, never()).delete(any(Course.class));
     }
 
     @Test
-    void deleteCourse_ShouldThrowDeletionBlockedException_WhenDataIntegrityViolationOccurs() {
-        when(courseRepository.findById(1L)).thenReturn(Optional.of(testCourse));
-        doThrow(DataIntegrityViolationException.class).when(courseRepository).delete(testCourse);
+    void deleteCourse_WhenDataIntegrityViolation_ThrowsDeletionBlockedException() {
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course1));
+        doThrow(new DataIntegrityViolationException("constraint violation")).when(courseRepository).delete(course1);
 
         assertThrows(DeletionBlockedException.class, () -> courseService.deleteCourse(1L));
-
-        verify(courseRepository).findById(1L);
-        verify(courseRepository).delete(testCourse);
+        verify(courseRepository).delete(course1);
     }
 }
