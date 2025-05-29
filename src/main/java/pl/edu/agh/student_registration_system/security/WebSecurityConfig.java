@@ -36,6 +36,7 @@ import pl.edu.agh.student_registration_system.security.jwt.AuthEntryPointJwt;
 import pl.edu.agh.student_registration_system.security.jwt.AuthTokenFilter;
 import pl.edu.agh.student_registration_system.security.jwt.JwtUtils;
 import pl.edu.agh.student_registration_system.security.service.UserDetailsServiceImpl;
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
@@ -99,7 +100,7 @@ public class WebSecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .cors(Customizer.withDefaults())
+                .cors(cors -> cors.configure(http))
                 .csrf(AbstractHttpConfigurer::disable)
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -159,6 +160,18 @@ public class WebSecurityConfig {
         return http.build();
     }
 
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
 
     @Bean
     CommandLineRunner initData(RoleRepository roleRepository,
