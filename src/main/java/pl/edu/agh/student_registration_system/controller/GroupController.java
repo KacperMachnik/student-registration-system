@@ -54,7 +54,6 @@ public class GroupController {
         return ResponseEntity.noContent().build();
     }
 
-    // todo change for specific course?
     @GetMapping("/available")
     @PreAuthorize("hasAuthority('STUDENT')")
     public ResponseEntity<Page<GroupAvailabilityResponse>> getAvailableGroups(

@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateAttendanceDTO { // Dla Endpointu 45
+public class UpdateAttendanceDTO {
     @NotBlank
     private String status; // "PRESENT", "ABSENT", "EXCUSED"
 }

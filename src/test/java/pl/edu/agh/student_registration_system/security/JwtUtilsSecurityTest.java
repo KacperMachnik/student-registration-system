@@ -93,7 +93,7 @@ class JwtUtilsSecurityTest {
 
         assertNotNull(cookie);
         assertEquals(jwtCookieName, cookie.getName());
-        // Wartość może być pusta, ale niekoniecznie null
+        
         assertEquals("/", cookie.getPath());
         assertEquals(0, cookie.getMaxAge().getSeconds());
     }

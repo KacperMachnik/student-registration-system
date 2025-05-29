@@ -138,10 +138,10 @@ class EnrollmentServiceTest {
         when(studentService.findStudentById(1L)).thenReturn(student);
         when(courseGroupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(courseGroup));
         when(enrollmentRepository.existsByStudentAndGroup_Course(student, course)).thenReturn(false);
-        when(enrollmentRepository.countByGroup(courseGroup)).thenReturn(30); // Capacity full
+        when(enrollmentRepository.countByGroup(courseGroup)).thenReturn(30);
         when(enrollmentRepository.save(any(Enrollment.class))).thenReturn(enrollment);
 
-        EnrollmentResponse response = enrollmentService.enrollStudentById(1L, 1L, true); // Admin override
+        EnrollmentResponse response = enrollmentService.enrollStudentById(1L, 1L, true);
 
         assertNotNull(response);
         verify(enrollmentRepository).save(any(Enrollment.class));

@@ -10,7 +10,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class RecordAttendanceDTO { //TODO
+public class RecordAttendanceDTO {
     @NotEmpty
     private List<AttendanceRecordDTO> attendanceList;
 }
