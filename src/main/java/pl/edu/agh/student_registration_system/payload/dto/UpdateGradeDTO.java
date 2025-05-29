@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateGradeDTO { // Dla Endpointu 39
+public class UpdateGradeDTO {
     @NotBlank
     private String gradeValue;
     @Size(max = 1000)

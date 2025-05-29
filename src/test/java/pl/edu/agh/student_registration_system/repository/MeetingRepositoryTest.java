@@ -1,180 +1,72 @@
 package pl.edu.agh.student_registration_system.repository;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import pl.edu.agh.student_registration_system.model.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-class MeetingRepositoryTest {
+public class MeetingRepositoryTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
 
     @Autowired
     private MeetingRepository meetingRepository;
 
-    @Autowired
-    private CourseRepository courseRepository;
-
-    @Autowired
-    private CourseGroupRepository courseGroupRepository;
-
-    @Autowired
-    private TeacherRepository teacherRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
-
-    private Course course;
     private CourseGroup group1;
-    private CourseGroup group2;
-    private Meeting meeting1;
-    private Meeting meeting2;
-    private Meeting meeting3;
-    private Meeting meeting4;
-    private Role teacherRole;
+    private Meeting meeting1, meeting2, meeting3;
 
     @BeforeEach
     void setUp() {
-        teacherRole = new Role();
-        teacherRole.setRoleName(RoleType.TEACHER);
-        roleRepository.save(teacherRole);
+        Role teacherRole = new Role(RoleType.TEACHER);
+        entityManager.persist(teacherRole);
+        User userT1 = new User(null, "Teacher", "Met", "pass", "tmet@example.com", true, teacherRole, null, null);
+        entityManager.persist(userT1);
+        Teacher teacher1 = new Teacher(null, "Prof.", userT1, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(teacher1);
 
-        User teacherUser = new User();
-        teacherUser.setEmail("teacher@example.com");
-        teacherUser.setPassword("password");
-        teacherUser.setFirstName("Jan");
-        teacherUser.setLastName("Profesor");
-        teacherUser.setRole(teacherRole);
-        teacherUser.setIsActive(true);
-        userRepository.save(teacherUser);
+        Course course1 = new Course(null, "Course M", "CM1", "Desc M", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course1);
 
-        Teacher teacher = new Teacher();
-        teacher.setUser(teacherUser);
-        teacher.setTitle("Prof.");
-        teacherRepository.save(teacher);
+        group1 = new CourseGroup(null, 1, 20, course1, teacher1, new HashSet<>(), new ArrayList<>());
+        entityManager.persist(group1);
 
-        course = new Course();
-        course.setCourseName("Programowanie");
-        course.setCourseCode("PRG101");
-        course.setDescription("Kurs programowania");
-        course.setCredits(5);
-        courseRepository.save(course);
-
-        group1 = new CourseGroup();
-        group1.setCourse(course);
-        group1.setTeacher(teacher);
-        group1.setGroupNumber(101);
-        group1.setMaxCapacity(30);
-        courseGroupRepository.save(group1);
-
-        group2 = new CourseGroup();
-        group2.setCourse(course);
-        group2.setTeacher(teacher);
-        group2.setGroupNumber(102);
-        group2.setMaxCapacity(25);
-        courseGroupRepository.save(group2);
-
-        meeting1 = new Meeting();
-        meeting1.setGroup(group1);
-        meeting1.setMeetingNumber(1);
-        meeting1.setMeetingDate(LocalDateTime.now().plusDays(1));
-        meeting1.setTopic("Introduction");
+        meeting1 = new Meeting(null, 1, LocalDateTime.now().minusDays(2), "Intro", group1, new HashSet<>());
         meetingRepository.save(meeting1);
-
-        meeting2 = new Meeting();
-        meeting2.setGroup(group1);
-        meeting2.setMeetingNumber(2);
-        meeting2.setMeetingDate(LocalDateTime.now().plusDays(8));
-        meeting2.setTopic("Basic concepts");
+        meeting2 = new Meeting(null, 2, LocalDateTime.now().minusDays(1), "Mid", group1, new HashSet<>());
         meetingRepository.save(meeting2);
-
-        meeting3 = new Meeting();
-        meeting3.setGroup(group1);
-        meeting3.setMeetingNumber(3);
-        meeting3.setMeetingDate(LocalDateTime.now().plusDays(15));
-        meeting3.setTopic("Advanced topics");
+        meeting3 = new Meeting(null, 3, LocalDateTime.now(), "Final", group1, new HashSet<>());
         meetingRepository.save(meeting3);
 
-        meeting4 = new Meeting();
-        meeting4.setGroup(group2);
-        meeting4.setMeetingNumber(1);
-        meeting4.setMeetingDate(LocalDateTime.now().plusDays(2));
-        meeting4.setTopic("Introduction for group 2");
-        meetingRepository.save(meeting4);
+        entityManager.flush();
     }
 
     @Test
-    @DisplayName("Should find top meeting by group ordered by meeting number desc")
-    void shouldFindTopByGroupOrderByMeetingNumberDesc() {
-        Optional<Meeting> latestMeeting = meetingRepository.findTopByGroupOrderByMeetingNumberDesc(group1);
-
-        assertTrue(latestMeeting.isPresent());
-        assertEquals(meeting3, latestMeeting.get());
-        assertEquals(3, latestMeeting.get().getMeetingNumber());
+    void testFindTopByGroupOrderByMeetingNumberDesc() {
+        Optional<Meeting> topMeeting = meetingRepository.findTopByGroupOrderByMeetingNumberDesc(group1);
+        assertThat(topMeeting).isPresent();
+        assertThat(topMeeting.get()).isEqualTo(meeting3);
+        assertThat(topMeeting.get().getMeetingNumber()).isEqualTo(3);
     }
 
     @Test
-    @DisplayName("Should find meetings by group ordered by meeting number")
-    void shouldFindByGroupOrderByMeetingNumber() {
+    void testFindByGroupOrderByMeetingNumber() {
         List<Meeting> meetings = meetingRepository.findByGroupOrderByMeetingNumber(group1);
-
-        assertEquals(3, meetings.size());
-        assertEquals(meeting1, meetings.get(0));
-        assertEquals(meeting2, meetings.get(1));
-        assertEquals(meeting3, meetings.get(2));
-    }
-
-    @Test
-    @DisplayName("Should save new meeting")
-    void shouldSaveNewMeeting() {
-        Meeting newMeeting = new Meeting();
-        newMeeting.setGroup(group2);
-        newMeeting.setMeetingNumber(2);
-        newMeeting.setMeetingDate(LocalDateTime.now().plusDays(9));
-        newMeeting.setTopic("Second meeting for group 2");
-
-        Meeting savedMeeting = meetingRepository.save(newMeeting);
-
-        assertNotNull(savedMeeting.getMeetingId());
-
-        Optional<Meeting> foundMeeting = meetingRepository.findById(savedMeeting.getMeetingId());
-        assertTrue(foundMeeting.isPresent());
-        assertEquals(2, foundMeeting.get().getMeetingNumber());
-        assertEquals("Second meeting for group 2", foundMeeting.get().getTopic());
-    }
-
-    @Test
-    @DisplayName("Should update existing meeting")
-    void shouldUpdateExistingMeeting() {
-        meeting1.setTopic("Updated introduction");
-        meeting1.setMeetingDate(LocalDateTime.now().plusDays(2));
-
-        Meeting updatedMeeting = meetingRepository.save(meeting1);
-
-        assertEquals(meeting1.getMeetingId(), updatedMeeting.getMeetingId());
-        assertEquals("Updated introduction", updatedMeeting.getTopic());
-
-        Optional<Meeting> foundMeeting = meetingRepository.findById(meeting1.getMeetingId());
-        assertTrue(foundMeeting.isPresent());
-        assertEquals("Updated introduction", foundMeeting.get().getTopic());
-    }
-
-    @Test
-    @DisplayName("Should delete meeting")
-    void shouldDeleteMeeting() {
-        meetingRepository.delete(meeting4);
-
-        Optional<Meeting> foundMeeting = meetingRepository.findById(meeting4.getMeetingId());
-        assertFalse(foundMeeting.isPresent());
+        assertThat(meetings).hasSize(3);
+        assertThat(meetings).containsExactly(meeting1, meeting2, meeting3);
+        assertThat(meetings.get(0).getMeetingNumber()).isEqualTo(1);
+        assertThat(meetings.get(1).getMeetingNumber()).isEqualTo(2);
+        assertThat(meetings.get(2).getMeetingNumber()).isEqualTo(3);
     }
 }

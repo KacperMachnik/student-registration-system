@@ -34,6 +34,4 @@ public class UserController {
         log.info("User with email {} registered successfully by Deanery staff.", registerRequest.getEmail());
         return ResponseEntity.status(HttpStatus.CREATED).body(new MessageResponse("User registered successfully!"));
     }
-
-    // TODO: Dodać inne endpointy zarządzania użytkownikami
 }

@@ -17,9 +17,6 @@ public class Grade {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long gradeId;
 
-
-    // TODO:
-    //  zostawić String czy nie?
     @Column(nullable = false)
     private String gradeValue;
 

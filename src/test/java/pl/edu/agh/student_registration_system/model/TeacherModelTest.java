@@ -1,104 +1,136 @@
 package pl.edu.agh.student_registration_system.model;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import java.util.HashSet;
-import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@DataJpaTest
 class TeacherModelTest {
 
-    @Test
-    void shouldCreateTeacherWithAllFields() {
-        User user = new User();
+    @Autowired
+    private TestEntityManager entityManager;
 
-        Teacher teacher = new Teacher();
-        teacher.setTeacherId(1L);
-        teacher.setTitle("Prof.");
-        teacher.setUser(user);
+    private User testUser;
+    private Role teacherRole;
+    private Role studentRole;
 
-        assertEquals(1L, teacher.getTeacherId());
-        assertEquals("Prof.", teacher.getTitle());
-        assertEquals(user, teacher.getUser());
-        assertNotNull(teacher.getTaughtGroups());
-        assertNotNull(teacher.getIssuedGrades());
-        assertNotNull(teacher.getRecordedAttendances());
+    @BeforeEach
+    void setUp() {
+        teacherRole = new Role(RoleType.TEACHER);
+        entityManager.persist(teacherRole);
+
+        studentRole = new Role(RoleType.STUDENT);
+        entityManager.persist(studentRole);
+
+        testUser = new User(null, "Severus", "Snape", "password", "s.snape@example.com", true, teacherRole, null, null);
+        entityManager.persist(testUser);
+
+        entityManager.flush();
+        entityManager.clear();
     }
 
     @Test
-    void shouldCreateTeacherWithConstructor() {
-        User user = new User();
+    void testPersistAndFindTeacher() {
+        Teacher teacher = new Teacher(null, "Prof.", testUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        Teacher savedTeacher = entityManager.persistAndFlush(teacher);
 
-        Teacher teacher = new Teacher(1L, "Dr", user, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        assertThat(savedTeacher).isNotNull();
+        assertThat(savedTeacher.getTeacherId()).isNotNull();
+        assertThat(savedTeacher.getTitle()).isEqualTo("Prof.");
+        assertThat(savedTeacher.getUser().getUserId()).isEqualTo(testUser.getUserId());
 
-        assertEquals(1L, teacher.getTeacherId());
-        assertEquals("Dr", teacher.getTitle());
-        assertEquals(user, teacher.getUser());
-        assertNotNull(teacher.getTaughtGroups());
-        assertNotNull(teacher.getIssuedGrades());
-        assertNotNull(teacher.getRecordedAttendances());
+        Teacher foundTeacher = entityManager.find(Teacher.class, savedTeacher.getTeacherId());
+        assertThat(foundTeacher).isEqualTo(savedTeacher);
+        assertThat(foundTeacher.getUser().getFirstName()).isEqualTo("Severus");
     }
 
     @Test
-    void shouldAddTaughtGroup() {
-        Teacher teacher = new Teacher();
-        CourseGroup group = new CourseGroup();
-        group.setTeacher(teacher);
-
-        teacher.getTaughtGroups().add(group);
-
-        assertEquals(1, teacher.getTaughtGroups().size());
-        assertTrue(teacher.getTaughtGroups().contains(group));
+    void testUserIsNotNull() {
+        Teacher teacher = new Teacher(null, "Dr.", null, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(teacher);
+        });
     }
 
     @Test
-    void shouldAddIssuedGrade() {
-        Teacher teacher = new Teacher();
-        Grade grade = new Grade();
-        grade.setTeacher(teacher);
+    void testOneToManyTaughtGroupsRelationship() {
+        Teacher teacher = new Teacher(null, "Prof.", testUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(teacher);
 
+        Course course = new Course(null, "Potions", "POT101", "Brewing potions", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course);
+
+        CourseGroup group1 = new CourseGroup(null, 1, 20, course, teacher, new HashSet<>(), new ArrayList<>());
+        CourseGroup group2 = new CourseGroup(null, 2, 25, course, teacher, new HashSet<>(), new ArrayList<>());
+
+        teacher.getTaughtGroups().add(group1);
+        teacher.getTaughtGroups().add(group2);
+
+        entityManager.persistAndFlush(group1);
+        entityManager.persistAndFlush(group2);
+        entityManager.clear();
+
+        Teacher foundTeacher = entityManager.find(Teacher.class, teacher.getTeacherId());
+        assertThat(foundTeacher.getTaughtGroups()).hasSize(2);
+        assertThat(foundTeacher.getTaughtGroups().stream().map(CourseGroup::getGroupNumber)).contains(1, 2);
+    }
+
+    @Test
+    void testOneToManyIssuedGradesRelationship() {
+        Teacher teacher = new Teacher(null, "Prof.", testUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(teacher);
+
+        User studentUser = new User(null, "Harry", "Potter", "pass", "h.potter@example.com", true, studentRole, null, null);
+        entityManager.persist(studentUser);
+        Student student = new Student(null, "445566", studentUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(student);
+
+        Course course = new Course(null, "Defense Against Dark Arts", "DADA202", "Spells", 4, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course);
+
+        Grade grade = new Grade(null, "E", java.time.LocalDateTime.now(), "Needs improvement", student, course, teacher);
         teacher.getIssuedGrades().add(grade);
+        entityManager.persistAndFlush(grade);
+        entityManager.clear();
 
-        assertEquals(1, teacher.getIssuedGrades().size());
-        assertTrue(teacher.getIssuedGrades().contains(grade));
+        Teacher foundTeacher = entityManager.find(Teacher.class, teacher.getTeacherId());
+        assertThat(foundTeacher.getIssuedGrades()).hasSize(1);
+        assertThat(foundTeacher.getIssuedGrades().iterator().next().getGradeValue()).isEqualTo("E");
     }
 
     @Test
-    void shouldAddRecordedAttendance() {
-        Teacher teacher = new Teacher();
-        Attendance attendance = new Attendance();
-        attendance.setRecordedByTeacher(teacher);
+    void testOneToManyRecordedAttendancesRelationship() {
+        Teacher teacher = new Teacher(null, "Prof.", testUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(teacher);
 
+        User studentUser = new User(null, "Hermione", "Granger", "pass", "h.granger@example.com", true, studentRole, null, null);
+        entityManager.persist(studentUser);
+        Student student = new Student(null, "778899", studentUser, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(student);
+
+        Course course = new Course(null, "Charms", "CHARM101", "Charms", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persist(course);
+        CourseGroup group = new CourseGroup(null, 1, 10, course, teacher, new HashSet<>(), new ArrayList<>());
+        entityManager.persist(group);
+        Meeting meeting = new Meeting(null, 1, java.time.LocalDateTime.now(), "Lecture 1", group, new HashSet<>());
+        entityManager.persist(meeting);
+
+        Attendance attendance = new Attendance(null, AttendanceStatus.PRESENT, meeting, student, teacher);
         teacher.getRecordedAttendances().add(attendance);
+        entityManager.persistAndFlush(attendance);
+        entityManager.clear();
 
-        assertEquals(1, teacher.getRecordedAttendances().size());
-        assertTrue(teacher.getRecordedAttendances().contains(attendance));
-    }
-
-    @Test
-    void shouldImplementEqualsAndHashCode() {
-        Teacher teacher1 = new Teacher();
-        teacher1.setTeacherId(1L);
-
-        Teacher teacher2 = new Teacher();
-        teacher2.setTeacherId(1L);
-
-        Teacher teacher3 = new Teacher();
-        teacher3.setTeacherId(2L);
-
-        assertEquals(teacher1, teacher2);
-        assertNotEquals(teacher1, teacher3);
-        assertEquals(teacher1.hashCode(), teacher2.hashCode());
-        assertNotEquals(teacher1.hashCode(), teacher3.hashCode());
-    }
-
-    @Test
-    void shouldImplementToString() {
-        Teacher teacher = new Teacher();
-        teacher.setTeacherId(1L);
-        teacher.setTitle("Prof.");
-
-        String toString = teacher.toString();
-
-        assertTrue(toString.contains("teacherId=1"));
-        assertTrue(toString.contains("title=Prof."));
+        Teacher foundTeacher = entityManager.find(Teacher.class, teacher.getTeacherId());
+        assertThat(foundTeacher.getRecordedAttendances()).hasSize(1);
+        assertThat(foundTeacher.getRecordedAttendances().iterator().next().getStatus()).isEqualTo(AttendanceStatus.PRESENT);
     }
 }

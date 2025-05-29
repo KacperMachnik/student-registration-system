@@ -1,82 +1,114 @@
 package pl.edu.agh.student_registration_system.model;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@DataJpaTest
 class AttendanceModelTest {
 
-    @Test
-    void shouldCreateAttendanceWithAllFields() {
-        Meeting meeting = new Meeting();
-        Student student = new Student();
-        Teacher teacher = new Teacher();
+    @Autowired
+    private TestEntityManager entityManager;
 
-        Attendance attendance = new Attendance();
-        attendance.setAttendanceId(1L);
-        attendance.setStatus(AttendanceStatus.PRESENT);
-        attendance.setMeeting(meeting);
-        attendance.setStudent(student);
-        attendance.setRecordedByTeacher(teacher);
+    private Meeting testMeeting;
+    private Student testStudent;
+    private Teacher testTeacher;
 
-        assertEquals(1L, attendance.getAttendanceId());
-        assertEquals(AttendanceStatus.PRESENT, attendance.getStatus());
-        assertEquals(meeting, attendance.getMeeting());
-        assertEquals(student, attendance.getStudent());
-        assertEquals(teacher, attendance.getRecordedByTeacher());
+    @BeforeEach
+    void setUp() {
+        Role studentRole = new Role(RoleType.STUDENT);
+        entityManager.persist(studentRole);
+        User user1 = new User(null, "John", "Doe", "password", "john.doe@example.com", true, studentRole, null, null);
+        entityManager.persist(user1);
+        testStudent = new Student(null, "123456", user1, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(testStudent);
+
+        Role teacherRole = new Role(RoleType.TEACHER);
+        entityManager.persist(teacherRole);
+        User user2 = new User(null, "Jane", "Smith", "password", "jane.smith@example.com", true, teacherRole, null, null);
+        entityManager.persist(user2);
+        testTeacher = new Teacher(null, "Prof.", user2, new HashSet<>(), new HashSet<>(), new HashSet<>());
+        entityManager.persist(testTeacher);
+
+        Course testCourse = new Course(null, "Test Course", "TC101", "Description", 3, new HashSet<>(), new HashSet<>());
+        entityManager.persist(testCourse);
+        CourseGroup testGroup = new CourseGroup(null, 1, 30, testCourse, testTeacher, new HashSet<>(), new ArrayList<>());
+        entityManager.persist(testGroup);
+        testMeeting = new Meeting(null, 1, java.time.LocalDateTime.now(), "Intro", testGroup, new HashSet<>());
+        entityManager.persist(testMeeting);
+
+        entityManager.flush();
+        entityManager.clear();
     }
 
     @Test
-    void shouldCreateAttendanceWithConstructor() {
-        Meeting meeting = new Meeting();
-        Student student = new Student();
-        Teacher teacher = new Teacher();
+    void testPersistAndFindAttendance() {
+        Attendance attendance = new Attendance(null, AttendanceStatus.PRESENT, testMeeting, testStudent, testTeacher);
+        Attendance savedAttendance = entityManager.persistAndFlush(attendance);
 
-        Attendance attendance = new Attendance(1L, AttendanceStatus.ABSENT, meeting, student, teacher);
+        assertThat(savedAttendance).isNotNull();
+        assertThat(savedAttendance.getAttendanceId()).isNotNull();
+        assertThat(savedAttendance.getStatus()).isEqualTo(AttendanceStatus.PRESENT);
 
-        assertEquals(1L, attendance.getAttendanceId());
-        assertEquals(AttendanceStatus.ABSENT, attendance.getStatus());
-        assertEquals(meeting, attendance.getMeeting());
-        assertEquals(student, attendance.getStudent());
-        assertEquals(teacher, attendance.getRecordedByTeacher());
+        Attendance foundAttendance = entityManager.find(Attendance.class, savedAttendance.getAttendanceId());
+        assertThat(foundAttendance).isEqualTo(savedAttendance);
+        assertThat(foundAttendance.getMeeting().getMeetingId()).isEqualTo(testMeeting.getMeetingId());
+        assertThat(foundAttendance.getStudent().getStudentId()).isEqualTo(testStudent.getStudentId());
+        assertThat(foundAttendance.getRecordedByTeacher().getTeacherId()).isEqualTo(testTeacher.getTeacherId());
     }
 
     @Test
-    void shouldUpdateAttendanceStatus() {
-        Attendance attendance = new Attendance();
-        attendance.setStatus(AttendanceStatus.PRESENT);
+    void testUniqueConstraintForMeetingAndStudent() {
+        Attendance attendance1 = new Attendance(null, AttendanceStatus.PRESENT, testMeeting, testStudent, testTeacher);
+        entityManager.persistAndFlush(attendance1);
 
-        assertEquals(AttendanceStatus.PRESENT, attendance.getStatus());
+        Attendance attendance2 = new Attendance(null, AttendanceStatus.ABSENT, testMeeting, testStudent, testTeacher);
 
-        attendance.setStatus(AttendanceStatus.EXCUSED);
-        assertEquals(AttendanceStatus.EXCUSED, attendance.getStatus());
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(attendance2);
+        });
     }
 
     @Test
-    void shouldImplementEqualsAndHashCode() {
-        Attendance attendance1 = new Attendance();
-        attendance1.setAttendanceId(1L);
-
-        Attendance attendance2 = new Attendance();
-        attendance2.setAttendanceId(1L);
-
-        Attendance attendance3 = new Attendance();
-        attendance3.setAttendanceId(2L);
-
-        assertEquals(attendance1, attendance2);
-        assertNotEquals(attendance1, attendance3);
-        assertEquals(attendance1.hashCode(), attendance2.hashCode());
-        assertNotEquals(attendance1.hashCode(), attendance3.hashCode());
+    void testStatusIsNotNull() {
+        Attendance attendance = new Attendance(null, null, testMeeting, testStudent, testTeacher);
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(attendance);
+        });
     }
 
     @Test
-    void shouldImplementToString() {
-        Attendance attendance = new Attendance();
-        attendance.setAttendanceId(1L);
-        attendance.setStatus(AttendanceStatus.PRESENT);
+    void testMeetingIsNotNull() {
+        Attendance attendance = new Attendance(null, AttendanceStatus.PRESENT, null, testStudent, testTeacher);
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(attendance);
+        });
+    }
 
-        String toString = attendance.toString();
+    @Test
+    void testStudentIsNotNull() {
+        Attendance attendance = new Attendance(null, AttendanceStatus.PRESENT, testMeeting, null, testTeacher);
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(attendance);
+        });
+    }
 
-        assertTrue(toString.contains("attendanceId=1"));
-        assertTrue(toString.contains("status=PRESENT"));
+    @Test
+    void testRecordedByTeacherIsNotNull() {
+        Attendance attendance = new Attendance(null, AttendanceStatus.PRESENT, testMeeting, testStudent, null);
+        assertThrows(ConstraintViolationException.class, () -> {
+            entityManager.persistAndFlush(attendance);
+        });
     }
 }

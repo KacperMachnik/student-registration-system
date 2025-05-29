@@ -1,36 +1,29 @@
 package pl.edu.agh.student_registration_system.model;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AttendanceStatusModelTest {
 
     @Test
-    void shouldHaveThreeValues() {
-        assertEquals(3, AttendanceStatus.values().length);
+    void testAttendanceStatusEnumValues() {
+        assertThat(AttendanceStatus.values()).containsExactlyInAnyOrder(
+                AttendanceStatus.PRESENT,
+                AttendanceStatus.ABSENT,
+                AttendanceStatus.EXCUSED
+        );
     }
 
     @Test
-    void shouldContainPresentValue() {
-        assertTrue(containsEnumValue(AttendanceStatus.class, "PRESENT"));
+    void testValueOfExistingStatus() {
+        assertDoesNotThrow(() -> AttendanceStatus.valueOf("PRESENT"));
+        assertThat(AttendanceStatus.valueOf("PRESENT")).isEqualTo(AttendanceStatus.PRESENT);
     }
 
     @Test
-    void shouldContainAbsentValue() {
-        assertTrue(containsEnumValue(AttendanceStatus.class, "ABSENT"));
-    }
-
-    @Test
-    void shouldContainExcusedValue() {
-        assertTrue(containsEnumValue(AttendanceStatus.class, "EXCUSED"));
-    }
-
-    private <E extends Enum<E>> boolean containsEnumValue(Class<E> enumClass, String value) {
-        for (E enumValue : enumClass.getEnumConstants()) {
-            if (enumValue.name().equals(value)) {
-                return true;
-            }
-        }
-        return false;
+    void testValueOfNonExistingStatusThrowsException() {
+        assertThrows(IllegalArgumentException.class, () -> AttendanceStatus.valueOf("INVALID_STATUS"));
     }
 }

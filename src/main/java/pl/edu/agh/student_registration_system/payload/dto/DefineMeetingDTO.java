@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.List; // Import dla List
+import java.util.List;
 
 @Data
 @NoArgsConstructor
