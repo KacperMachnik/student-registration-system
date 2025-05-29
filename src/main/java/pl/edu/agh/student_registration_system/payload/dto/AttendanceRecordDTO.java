@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class AttendanceRecordDTO { //TODO
+public class AttendanceRecordDTO {
     @NotNull
     private Long studentId;
     @NotBlank

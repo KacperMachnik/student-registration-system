@@ -64,9 +64,6 @@ public class CourseController {
         return ResponseEntity.ok(page);
     }
 
-    //todo
-    // fetch json only if assigned to course or smth
-    // no need for course every time
     @GetMapping("/{courseId}/groups")
     @PreAuthorize("hasAnyAuthority('DEANERY_STAFF', 'STUDENT', 'TEACHER')")
     public ResponseEntity<List<GroupResponse>> getGroupsForCourse(@PathVariable Long courseId) {

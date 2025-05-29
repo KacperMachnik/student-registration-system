@@ -118,8 +118,8 @@ public class WebSecurityConfig {
 
                         .requestMatchers("/api/teachers/me/**").hasAuthority(RoleType.TEACHER.name())
                         .requestMatchers(HttpMethod.POST, "/api/grades").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.PUT, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
-                        .requestMatchers(HttpMethod.DELETE, "/api/grades/**").hasAuthority(RoleType.TEACHER.name())
+                        .requestMatchers(HttpMethod.PUT, "/api/grades/**").hasAnyAuthority(RoleType.TEACHER.name(), RoleType.DEANERY_STAFF.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/grades/**").hasAnyAuthority(RoleType.TEACHER.name(), RoleType.DEANERY_STAFF.name())
 
 
                         .requestMatchers(HttpMethod.GET, "/api/groups/{groupId}/students").authenticated()

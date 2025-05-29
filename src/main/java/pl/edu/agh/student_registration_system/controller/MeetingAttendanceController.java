@@ -39,8 +39,6 @@ public class MeetingAttendanceController {
         return ResponseEntity.ok(meetings);
     }
 
-    // TODO ATTENDANCE
-
     @PostMapping("/meetings/{meetingId}/attendance")
     @PreAuthorize("hasAuthority('TEACHER') and @meetingSecurityService.isTeacherForMeeting(#meetingId)")
     public ResponseEntity<List<AttendanceResponse>> recordAttendance(@PathVariable Long meetingId, @Valid @RequestBody RecordAttendanceDTO recordAttendanceDto) {

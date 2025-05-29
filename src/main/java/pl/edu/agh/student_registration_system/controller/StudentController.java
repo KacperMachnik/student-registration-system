@@ -70,7 +70,6 @@ public class StudentController {
         return ResponseEntity.ok(groups);
     }
 
-    //todo grades
     @GetMapping("/me/grades")
     @PreAuthorize("hasAuthority('STUDENT')")
     public ResponseEntity<List<GradeResponse>> getCurrentStudentGrades(
@@ -79,7 +78,6 @@ public class StudentController {
         return ResponseEntity.ok(grades);
     }
 
-    //todo attendance
     @GetMapping("/me/attendance")
     @PreAuthorize("hasAuthority('STUDENT')")
     public ResponseEntity<List<AttendanceResponse>> getCurrentStudentAttendance(

@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class AttendanceResponse { //TODO
+public class AttendanceResponse {
     private Long attendanceId;
     private String status;
     private MeetingMinimalResponse meeting;
