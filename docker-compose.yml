@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432" # Udostępnia port bazy danych na hoście
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -17,27 +17,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped # Dodana polityka restartu dla bazy danych
+    restart: unless-stopped
 
   backend:
-    image: backend-student-registration # Użyj obrazu, który zbudowałeś
+    image: backend-student-registration
     container_name: backend-student-registration-app
     ports:
-      - "8080:8080" # Zmień 8080 na port, na którym działa Twoja aplikacja backendowa (host:kontener)
-                      # Port kontenera musi pasować do tego, co jest w EXPOSE w Dockerfile i na czym aplikacja faktycznie nasłuchuje.
+      - "8080:8080"
     environment:
-      # Zmienne środowiskowe dla Twojej aplikacji backendowej do połączenia z bazą danych.
-      # Poniższe są typowe dla aplikacji Spring Boot. Dostosuj je, jeśli Twoja aplikacja
-      # używa innych nazw zmiennych środowiskowych.
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/student_registration_system
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      # Możesz dodać inne zmienne środowiskowe potrzebne Twojej aplikacji, np.:
-      # SERVER_PORT: 8080 # Jeśli chcesz jawnie ustawić port wewnątrz kontenera (choć zwykle nie jest to konieczne, jeśli jest to standardowy port)
     depends_on:
       postgres:
-        condition: service_healthy # Backend uruchomi się dopiero, gdy postgres będzie "zdrowy"
-    restart: unless-stopped # Polityka restartu dla backendu
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres-data:
