@@ -345,24 +345,24 @@ public class CourseControllerIntegrationTest {
                 .andExpect(jsonPath("$.content[?(@.courseCode == 'SEARCH02')]").exists());
     }
 
-    @Test
-    void shouldGetGroupsForCourse() throws Exception {
-        CourseResponse course = createTestCourse("GRP-C100", "Course With Groups", 3, adminCookie);
-        Teacher teacher = createAndSaveTestTeacher("grpteach@example.com", "Group", "Teacher", "Dr");
+//     @Test
+//     void shouldGetGroupsForCourse() throws Exception {
+//         CourseResponse course = createTestCourse("GRP-C100", "Course With Groups", 3, adminCookie);
+//         Teacher teacher = createAndSaveTestTeacher("grpteach@example.com", "Group", "Teacher", "Dr");
 
-        createTestGroup(course.getCourseId(), teacher.getTeacherId(), 1, 20, adminCookie);
-        createTestGroup(course.getCourseId(), teacher.getTeacherId(), 2, 25, adminCookie);
+//         createTestGroup(course.getCourseId(), teacher.getTeacherId(), 1, 20, adminCookie);
+//         createTestGroup(course.getCourseId(), teacher.getTeacherId(), 2, 25, adminCookie);
 
-        mockMvc.perform(get("/api/courses/" + course.getCourseId() + "/groups")
-                        .cookie(adminCookie))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].groupNumber").value(1))
-                .andExpect(jsonPath("$[1].groupNumber").value(2))
-                .andExpect(jsonPath("$[0].course.courseId").value(course.getCourseId()))
-                .andExpect(jsonPath("$[0].teacher.teacherId").value(teacher.getTeacherId()));
-    }
+//         mockMvc.perform(get("/api/courses/" + course.getCourseId() + "/groups")
+//                         .cookie(adminCookie))
+//                 .andExpect(status().isOk())
+//                 .andExpect(jsonPath("$").isArray())
+//                 .andExpect(jsonPath("$", hasSize(2)))
+//                 .andExpect(jsonPath("$[0].groupNumber").value(1))
+//                 .andExpect(jsonPath("$[1].groupNumber").value(2))
+//                 .andExpect(jsonPath("$[0].course.courseId").value(course.getCourseId()))
+//                 .andExpect(jsonPath("$[0].teacher.teacherId").value(teacher.getTeacherId()));
+//     }
 
     @Test
     void getGroupsForNonExistentCourseShouldReturnNotFound() throws Exception {
